@@ -1,0 +1,25 @@
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      run: pnpm run format
+      stage_fixed: true
+    lint:
+      run: pnpm run lint:fix
+      stage_fixed: true
+    check:
+      run: pnpm run check:fix
+      stage_fixed: true
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: pnpm run typecheck
+      glob: "*.{ts,tsx}"
+    test:
+      run: pnpm run test
+      glob: "*.{ts,tsx}"
+    prisma-validate:
+      run: pnpm exec prisma validate
+      glob: "prisma/**/*.prisma"
