@@ -134,9 +134,14 @@ pnpm run check:fix
 
 ### Prisma
 
+El cliente de Prisma se genera automáticamente en `postinstall`. Para validar el schema: `pnpm run prisma:validate`.
+
 ```bash
 # Generar cliente de Prisma
 pnpm run prisma:generate
+
+# Validar schema de Prisma
+pnpm run prisma:validate
 
 # Crear nueva migración
 pnpm run prisma:migrate
