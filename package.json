@@ -30,6 +30,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "prisma:validate": "prisma validate",
     "prepare": "lefthook install"
   },
   "dependencies": {
