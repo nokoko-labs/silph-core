@@ -51,7 +51,8 @@
       "style": {
         "useNodejsImportProtocol": "error",
         "useConst": "error",
-        "noParameterAssign": "error"
+        "noParameterAssign": "error",
+        "useImportType": "off"
       },
       "suspicious": {
         "noExplicitAny": "warn",

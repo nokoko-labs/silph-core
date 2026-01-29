@@ -300,7 +300,7 @@ kime-api/
 │   │   └── redis.service.ts
 │   ├── config/                 # Configuración de la aplicación
 │   │   ├── config.module.ts
-│   │   └── config.validation.ts
+│   │   └── env.schema.ts
 │   ├── database/              # Módulo de base de datos
 │   │   ├── database.module.ts
 │   │   └── prisma.service.ts
