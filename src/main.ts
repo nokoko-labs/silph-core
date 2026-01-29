@@ -12,8 +12,8 @@ async function bootstrap() {
 
   // Swagger configuration
   const config = new DocumentBuilder()
-    .setTitle('Kime API')
-    .setDescription('Backend API documentation for Kime application')
+    .setTitle('Silph Core API')
+    .setDescription('Backend API documentation for Silph Core application')
     .setVersion('1.0')
     .addBearerAuth(
       {
@@ -24,13 +24,13 @@ async function bootstrap() {
         description: 'Enter JWT token',
         in: 'header',
       },
-      'JWT-auth', // This name here is important for matching up with @ApiBearerAuth() in your controller!
+      'BearerAuth',
     )
     .addTag('api', 'API endpoints')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document, {
+  SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true, // Persist authorization across page refreshes
     },
