@@ -1,74 +1,52 @@
-# Project Context
-You are an expert Backend Engineer specializing in NestJS, TypeScript, and modern REST API development.
-This is a Backend-only project (Headless API). There is no UI code.
+# Project Context: Silph Core
+You are a Senior Backend Engineer. This is a Headless API built with NestJS.
+The project follows a Trunk-Based Development approach, transitioning to GitFlow for multi-environment deployments (Develop/Production).
 
-# Tech Stack & Tooling
-- **Framework:** NestJS (latest stable).
-- **Language:** TypeScript (Strict mode).
-- **Linter/Formatter:** Biome (NOT ESLint/Prettier).
-- **Validation:** Zod (via `nestjs-zod` or `zod` schema validation pipes).
-- **Docs:** OpenAPI / Swagger (`@nestjs/swagger`).
-- **Database:** PostgreSQL with ORM (TypeORM or Prisma - infer from codebase).
-- **Environment:** Docker & Docker Compose.
+# Tech Stack & Infrastructure
+- **Framework:** NestJS (Latest).
+- **Language:** TypeScript (Strict).
+- **Linter/Formatter:** Biome (Strict mode).
+- **Database:** PostgreSQL on Neon.tech (Serverless).
+- **ORM:** Prisma.
+- **Cache/Queue:** Upstash (Redis).
+- **Hosting:** Railway.
+- **Package Manager:** pnpm.
+
+# Infrastructure & Deployment Rules
+- **Database Migrations:** Always use `npx prisma migrate dev` for local changes and `prisma migrate deploy` for environments.
+- **Environment Management:** Use `@nestjs/config`. Validate environment variables with Zod schemas in `src/config/`.
+- **Railway Flow:**
+  - `main` branch deploys to Production environment.
+  - `develop` branch deploys to Develop/Staging environment.
+- **Neon Branching:** Be aware that database URLs differ per environment. Do not hardcode connection strings.
 
 # Code Style & Core Principles
 
-## General NestJS Rules
-- **Dependency Injection:** Always use DI. Never instantiate services manually.
-- **Strict Typing:** Never use `any`. Define interfaces or DTOs for everything.
-- **Config:** Never access `process.env` directly. Use `@nestjs/config` and `ConfigService`.
-- **Async/Await:** Use `async/await` for all asynchronous operations. Avoid callback style.
-- **Project Structure:** Follow a modular architecture (Domain-Driven Design simplified).
-  - `src/modules/`: Feature modules.
-  - `src/common/`: Shared decorators, guards, filters.
-  - `src/config/`: Configuration schemas.
+## NestJS & Prisma
+- **Dependency Injection:** Mandatory.
+- **Prisma Service:** Use a global `PrismaService`. Ensure proper teardown with `onModuleInit`.
+- **Validation:** Use `nestjs-zod` for DTOs and API validation. 
+  - *Note: Do not mix with class-validator unless strictly necessary.*
+- **Project Structure:**
+  - `src/modules/`: Domain modules (Auth, Users, etc.).
+  - `src/common/`: Guards, Interceptors, Filters, Decorators.
+  - `src/infra/`: Prisma, Redis, and external service integrations.
 
-## Data Transfer Objects (DTOs)
-- All Input/Output must use DTOs.
-- Use **Class Validator** or **Zod** decorators for all DTO properties.
-- DTO names must end in `.dto.ts` (e.g., `create-user.dto.ts`).
-- Expose properties to Swagger using `@ApiProperty()` (or enable the CLI plugin).
+## Data Transfer Objects (DTOs) & OpenAPI
+- Every endpoint must have an Input DTO (Zod) and an Output DTO/Entity.
+- Endpoints must be documented with `@nestjs/swagger`. Use `@ApiProperty()` or the Zod-to-OpenAPI integration.
 
-## Error Handling
-- Use NestJS built-in `HttpException` or custom exceptions extending it.
-- Never swallow errors silently.
-- Use Global Exception Filters for standardized error responses.
-
-# Biome & Quality
-- Prefer `biome` commands over standard linting commands.
-- Before suggesting code, ensure it complies with Biome's strict rules (no unused vars, sorted imports).
-
-# Git & Commit Convention (STRICT)
-
-When asked to generate a commit message or when analyzing git changes, YOU MUST follow these rules:
-
-1.  **Format:** `type(scope): description`
-2.  **Length:** The entire header must be **UNDER 80 characters**.
-3.  **Case:** Lowercase only for the type and scope.
-4.  **Types:**
-    - `feat`: A new feature
-    - `fix`: A bug fix
-    - `docs`: Documentation only changes
-    - `style`: Changes that do not affect the meaning of the code (white-space, formatting, etc)
-    - `refactor`: A code change that neither fixes a bug nor adds a feature
-    - `perf`: A code change that improves performance
-    - `test`: Adding missing tests or correcting existing tests
-    - `chore`: Changes to the build process or auxiliary tools and libraries (e.g., Docker, Biome)
-    - `ci`: Changes to CI configuration files and scripts
-5.  **Scope:** Optional but recommended. Use the module name or file affected (e.g., `auth`, `user`, `config`).
-6.  **Imperative Mood:** The description must be imperative (e.g., "add login endpoint" NOT "added login endpoint").
-
-**Examples:**
-- ✅ `feat(auth): implement login with google`
-- ✅ `fix(user): resolve crash on invalid email`
-- ✅ `chore(deps): upgrade nestjs packages`
-- ❌ `feat: Added a new amazing login system that works with google and facebook` (Too long, not imperative)
+# Git & CI/CD Rules (STRICT)
+- **Commit Format:** `type(scope): description` (lowercase, imperative, < 80 chars).
+- **CI/CD:** Any change to infrastructure must be reflected in `.github/workflows/`. 
+- **Lockfile:** Always ensure `pnpm-lock.yaml` is updated when adding dependencies to avoid CI failures.
 
 # Testing
-- Write Unit Tests (`.spec.ts`) for all Services and Controllers.
-- Use `jest.spyOn` for mocking dependencies.
-- Ensure 100% coverage on critical business logic.
+- Unit tests for services and controllers using Jest.
+- Mock Prisma using `jest-mock-extended`.
+- Integration tests for critical flows using a dedicated test database branch.
 
-# Documentation
-- Always update Swagger decorators when modifying Controllers or DTOs.
-- Add JSDoc comments for complex business logic methods.
+# Instructions for Cursor Agent
+- Before creating a new migration, check if the `schema.prisma` is consistent.
+- When adding a feature, suggest the necessary environment variables for Railway and Upstash.
+- If a dependency is added, remind the user to run `pnpm install` to sync the lockfile before committing.

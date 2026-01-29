@@ -1,7 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HealthCheckDto } from './app.dto';
-// biome-ignore lint/style/useImportType: false positive
 import { AppService } from './app.service';
 
 @ApiTags('api')

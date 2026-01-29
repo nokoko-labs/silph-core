@@ -10,11 +10,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Example model - remove or modify as needed
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  isActive  Boolean  @default(true)
+  config    Json?    // Stores API Keys specifically for this tenant
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("tenants")
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
