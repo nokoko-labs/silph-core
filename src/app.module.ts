@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { RedisModule } from '@/cache/redis.module';
 import { ConfigModule } from '@/config/config.module';
 import { DatabaseModule } from '@/database/database.module';
+import { HealthModule } from '@/health/health.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -32,6 +33,7 @@ import { AppService } from './app.service';
       },
     }),
     DatabaseModule,
+    HealthModule,
     RedisModule,
   ],
   controllers: [AppController],
