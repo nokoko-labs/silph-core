@@ -1,5 +1,11 @@
 {
-  "branches": ["main", { "name": "develop", "prerelease": "beta" }],
+  "branches": [
+    "main",
+    {
+      "name": "develop",
+      "prerelease": "beta"
+    }
+  ],
   "plugins": [
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
@@ -13,7 +19,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "pnpm install --frozen-lockfile --no-frozen-lockfile --ignore-workspace && pnpm lefthook run pre-commit"
+        "prepareCmd": "pnpm install --no-frozen-lockfile --ignore-workspace --ignore-scripts"
       }
     ],
     [
