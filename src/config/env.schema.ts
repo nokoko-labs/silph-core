@@ -9,4 +9,6 @@ export const envSchema = Joi.object({
   PORT: Joi.number().integer().positive().default(3000),
   NODE_ENV: Joi.string().valid('dev', 'prod', 'test').required(),
   REDIS_URL: Joi.string().required().min(1),
+  JWT_SECRET: Joi.string().required().min(1),
+  JWT_EXPIRES_IN: Joi.string().default('7d'),
 });

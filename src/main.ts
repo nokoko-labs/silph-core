@@ -35,6 +35,7 @@ async function bootstrap() {
       'BearerAuth',
     )
     .addTag('api', 'API endpoints')
+    .addTag('auth', 'Authentication (JWT)')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

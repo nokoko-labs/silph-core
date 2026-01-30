@@ -5,6 +5,7 @@ const validConfig = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/test',
   REDIS_URL: 'redis://localhost:6379',
   NODE_ENV: 'dev',
+  JWT_SECRET: 'test-jwt-secret',
 };
 
 describe('envSchema', () => {
@@ -89,6 +90,7 @@ describe('envSchema', () => {
       DATABASE_URL: 'postgresql://user:pass@localhost:5432/test',
       REDIS_URL: 'redis://localhost:6379',
       NODE_ENV: 'dev',
+      JWT_SECRET: 'test-jwt-secret',
     };
 
     const { value, error } = envSchema.validate(config, { abortEarly: false });
@@ -105,6 +107,7 @@ describe('envSchema', () => {
       DATABASE_URL: 'postgresql://user:pass@localhost:5432/test',
       REDIS_URL: 'redis://localhost:6379',
       NODE_ENV: 'dev',
+      JWT_SECRET: 'test-jwt-secret',
     };
 
     const { value, error } = envSchema.validate(config, { abortEarly: false });
