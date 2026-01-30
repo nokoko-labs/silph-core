@@ -36,13 +36,12 @@ jobs:
         env:
           COREPACK_ENABLE_STRICT: 0
 
+      - name: Install Semantic Release globally
+        # Instalamos fuera del contexto de tu proyecto para evitar el error de "packages"
+        run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/exec @semantic-release/github @semantic-release/npm
+
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pnpm dlx semantic-release \
-            @semantic-release/changelog \
-            @semantic-release/git \
-            @semantic-release/exec \
-            @semantic-release/github \
-            @semantic-release/npm
+        # Ejecutamos el binario global
+        run: semantic-release
