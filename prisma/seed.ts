@@ -1,5 +1,8 @@
 import { type Prisma, PrismaClient } from '@prisma/client';
+<<<<<<< HEAD
 import * as bcrypt from 'bcryptjs';
+=======
+>>>>>>> 6ed92ef (feat(prisma): add seed script for initial tenant and user data (#13))
 import { z } from 'zod';
 
 /**
@@ -16,9 +19,14 @@ const TenantSeedSchema = z.object({
 
 const UserSeedSchema = z.object({
   email: z.string().email('Valid email is required'),
+<<<<<<< HEAD
   password: z.string().min(1, 'Password is required'),
   role: z.enum(['ADMIN', 'USER']).default('ADMIN'),
   tenantId: z.string().uuid(),
+=======
+  name: z.string().optional().nullable(),
+  tenantId: z.string().uuid().optional().nullable(),
+>>>>>>> 6ed92ef (feat(prisma): add seed script for initial tenant and user data (#13))
 });
 
 type TenantSeed = z.infer<typeof TenantSeedSchema>;
@@ -64,6 +72,7 @@ async function main(): Promise<void> {
   });
   console.log('Tenant created/updated:', tenant.id, tenant.slug);
 
+<<<<<<< HEAD
   const adminPassword =
     process.env.NODE_ENV === 'production'
       ? (() => {
@@ -79,6 +88,11 @@ async function main(): Promise<void> {
     email: ADMIN_USER_EMAIL,
     password: adminPassword,
     role: 'ADMIN',
+=======
+  const userPayload: UserSeed = {
+    email: ADMIN_USER_EMAIL,
+    name: 'Admin',
+>>>>>>> 6ed92ef (feat(prisma): add seed script for initial tenant and user data (#13))
     tenantId: tenant.id,
   };
 
@@ -88,12 +102,16 @@ async function main(): Promise<void> {
     throw new Error('Invalid user seed data');
   }
 
+<<<<<<< HEAD
   const hashedPassword = bcrypt.hashSync(userParsed.data.password, 10);
+=======
+>>>>>>> 6ed92ef (feat(prisma): add seed script for initial tenant and user data (#13))
   console.log('Creating User (admin)...');
   const user = await prisma.user.upsert({
     where: { email: userParsed.data.email },
     create: {
       email: userParsed.data.email,
+<<<<<<< HEAD
       password: hashedPassword,
       role: userParsed.data.role,
       tenantId: userParsed.data.tenantId,
@@ -102,6 +120,14 @@ async function main(): Promise<void> {
       password: hashedPassword,
       role: userParsed.data.role,
       tenantId: userParsed.data.tenantId,
+=======
+      name: userParsed.data.name ?? undefined,
+      tenantId: userParsed.data.tenantId ?? undefined,
+    },
+    update: {
+      name: userParsed.data.name ?? undefined,
+      tenantId: userParsed.data.tenantId ?? undefined,
+>>>>>>> 6ed92ef (feat(prisma): add seed script for initial tenant and user data (#13))
     },
   });
   console.log('User created/updated:', user.id, user.email);
@@ -112,5 +138,9 @@ async function main(): Promise<void> {
 
 main().catch((e) => {
   console.error('Seed failed:', e);
+<<<<<<< HEAD
   throw new Error(`Seed failed: ${e}`);
+=======
+  process.exit(1);
+>>>>>>> 6ed92ef (feat(prisma): add seed script for initial tenant and user data (#13))
 });
