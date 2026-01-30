@@ -20,34 +20,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 1. Instalamos pnpm primero
       - name: Install pnpm
         uses: pnpm/action-setup@v3
         with:
           version: 9
 
-      # 2. Setup Node SIN el parámetro cache (para evitar el error que estás viendo)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # 3. Configuramos el cache de pnpm manualmente pero de forma robusta
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
-
+      # Ruta hardcodeada para evitar el error de "path required"
       - name: Setup pnpm cache
         uses: actions/cache@v4
         with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          path: /home/runner/.local/share/pnpm/store/v3
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-store-
 
-      # 4. Instalación y Release
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
