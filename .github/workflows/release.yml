@@ -9,7 +9,6 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    # ESTO ES LO QUE FALTA: Permisos para que el bot pueda escribir en el repo
     permissions:
       contents: write
       issues: write
@@ -25,24 +24,14 @@ jobs:
         uses: pnpm/action-setup@v3
         with:
           version: 9
+          # Esto es clave: permite que pnpm gestione su propia configuración de cache
+          run_install: false 
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          cache: 'pnpm' # Ahora sí funcionará porque pnpm ya está en el PATH
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
