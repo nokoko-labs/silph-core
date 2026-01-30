@@ -13,7 +13,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "pnpm install --frozen-lockfile --no-frozen-lockfile && pnpm lefthook run pre-commit"
+        "prepareCmd": "pnpm install --frozen-lockfile --no-frozen-lockfile --ignore-workspace && pnpm lefthook run pre-commit"
       }
     ],
     [
