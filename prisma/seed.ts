@@ -1,4 +1,5 @@
 import { type Prisma, PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 import { z } from 'zod';
 
 /**
@@ -15,8 +16,9 @@ const TenantSeedSchema = z.object({
 
 const UserSeedSchema = z.object({
   email: z.string().email('Valid email is required'),
-  name: z.string().optional().nullable(),
-  tenantId: z.string().uuid().optional().nullable(),
+  password: z.string().min(1, 'Password is required'),
+  role: z.enum(['ADMIN', 'USER']).default('ADMIN'),
+  tenantId: z.string().uuid(),
 });
 
 type TenantSeed = z.infer<typeof TenantSeedSchema>;
@@ -62,9 +64,21 @@ async function main(): Promise<void> {
   });
   console.log('Tenant created/updated:', tenant.id, tenant.slug);
 
+  const adminPassword =
+    process.env.NODE_ENV === 'production'
+      ? (() => {
+          const p = process.env.ADMIN_SEED_PASSWORD;
+          if (p == null || p === '') {
+            throw new Error('ADMIN_SEED_PASSWORD is required in production');
+          }
+          return p;
+        })()
+      : (process.env.ADMIN_SEED_PASSWORD ?? 'admin123');
+
   const userPayload: UserSeed = {
     email: ADMIN_USER_EMAIL,
-    name: 'Admin',
+    password: adminPassword,
+    role: 'ADMIN',
     tenantId: tenant.id,
   };
 
@@ -74,17 +88,20 @@ async function main(): Promise<void> {
     throw new Error('Invalid user seed data');
   }
 
+  const hashedPassword = bcrypt.hashSync(userParsed.data.password, 10);
   console.log('Creating User (admin)...');
   const user = await prisma.user.upsert({
     where: { email: userParsed.data.email },
     create: {
       email: userParsed.data.email,
-      name: userParsed.data.name ?? undefined,
-      tenantId: userParsed.data.tenantId ?? undefined,
+      password: hashedPassword,
+      role: userParsed.data.role,
+      tenantId: userParsed.data.tenantId,
     },
     update: {
-      name: userParsed.data.name ?? undefined,
-      tenantId: userParsed.data.tenantId ?? undefined,
+      password: hashedPassword,
+      role: userParsed.data.role,
+      tenantId: userParsed.data.tenantId,
     },
   });
   console.log('User created/updated:', user.id, user.email);
@@ -95,5 +112,5 @@ async function main(): Promise<void> {
 
 main().catch((e) => {
   console.error('Seed failed:', e);
-  process.exit(1);
+  throw new Error(`Seed failed: ${e}`);
 });

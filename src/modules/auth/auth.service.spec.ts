@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { Role } from '@prisma/client';
+import { Role, type User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { type DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { RedisService } from '@/cache/redis.service';
