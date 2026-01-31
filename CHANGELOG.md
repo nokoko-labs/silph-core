@@ -1,3 +1,10 @@
+# [1.0.0-beta.2](https://github.com/nokoko-labs/Silph-Core/compare/v1.0.0-beta.1...v1.0.0-beta.2) (2026-01-31)
+
+
+### Features
+
+* **auth:** implement JWT auth SC-80 SC-81 ([#14](https://github.com/nokoko-labs/Silph-Core/issues/14)) ([fc19e78](https://github.com/nokoko-labs/Silph-Core/commit/fc19e78dfc0cc30d31982238bd9d4342d54b1ba3)), closes [hi#level](https://github.com/hi/issues/level)
+
 # 1.0.0-beta.1 (2026-01-30)
 
 
