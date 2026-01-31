@@ -153,6 +153,7 @@ pnpm run prisma:migrate:deploy
 pnpm run prisma:studio
 
 # Ejecutar seed (si está configurado)
+# En producción, define ADMIN_SEED_PASSWORD antes de ejecutar el seed.
 pnpm run prisma:seed
 ```
 

@@ -21,9 +21,6 @@ BEGIN
   END IF;
 END $$;
 
--- Remove users that still have null tenantId (no tenant exists)
-DELETE FROM "users" WHERE "tenantId" IS NULL;
-
 -- Make tenantId required
 ALTER TABLE "users" ALTER COLUMN "tenantId" SET NOT NULL;
 

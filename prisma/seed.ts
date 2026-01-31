@@ -64,9 +64,20 @@ async function main(): Promise<void> {
   });
   console.log('Tenant created/updated:', tenant.id, tenant.slug);
 
+  const adminPassword =
+    process.env.NODE_ENV === 'production'
+      ? (() => {
+          const p = process.env.ADMIN_SEED_PASSWORD;
+          if (p == null || p === '') {
+            throw new Error('ADMIN_SEED_PASSWORD is required in production');
+          }
+          return p;
+        })()
+      : (process.env.ADMIN_SEED_PASSWORD ?? 'admin123');
+
   const userPayload: UserSeed = {
     email: ADMIN_USER_EMAIL,
-    password: 'admin123', // will be hashed below
+    password: adminPassword,
     role: 'ADMIN',
     tenantId: tenant.id,
   };
