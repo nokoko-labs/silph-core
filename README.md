@@ -42,9 +42,10 @@ Edita el archivo `.env` y configura:
 - `DATABASE_URL`: URL de conexión a PostgreSQL
   - Para local (Docker): `postgresql://postgres:postgres@localhost:5432/kime_db?schema=public`
   - Para Supabase: Tu connection string de Supabase
-- `REDIS_HOST`: Host de Redis (default: `localhost`)
-- `REDIS_PORT`: Puerto de Redis (default: `6379`)
-- `REDIS_PASSWORD`: Contraseña de Redis (opcional, requerida si Redis tiene autenticación)
+- `REDIS_URL`: URL de conexión a Redis (ej. `redis://:password@localhost:6379`). **Recomendado para producción/nube** (Upstash, Railway).
+- `REDIS_HOST`: Host de Redis (default: `localhost`). Se usa si `REDIS_URL` no está presente.
+- `REDIS_PORT`: Puerto de Redis (default: `6379`). Se usa si `REDIS_URL` no está presente.
+- `REDIS_PASSWORD`: Contraseña de Redis (opcional). Se usa si `REDIS_URL` no está presente.
 
 4. Inicia los servicios con Docker Compose:
 ```bash
@@ -378,22 +379,33 @@ El `RedisService` proporciona los siguientes métodos:
 
 ### Configuración
 
-Redis se configura automáticamente usando las variables de entorno:
-- `REDIS_HOST`: Host de Redis (default: `localhost`)
-- `REDIS_PORT`: Puerto de Redis (default: `6379`)
-- `REDIS_PASSWORD`: Contraseña de Redis (opcional)
+Redis se configura automáticamente usando las variables de entorno. El sistema prioriza `REDIS_URL` si está definida:
+
+- `REDIS_URL`: URL completa de conexión (ej. `redis://:password@host:port`). Ideal para servicios como **Upstash** o **Railway**.
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`: Variables individuales usadas como fallback (principalmente para **Docker** o desarrollo local).
 
 ## 🔧 Configuración
 
 ### Variables de Entorno
 
-Las variables de entorno se validan automáticamente al iniciar la aplicación usando Zod. Las variables requeridas son:
+Las variables de entorno se validan automáticamente al iniciar la aplicación. Las variables requeridas son:
 
-- `NODE_ENV`: Entorno de ejecución (`development`, `production`, `test`)
+- `NODE_ENV`: Entorno de ejecución (`dev`, `prod`, `test`)
 - `PORT`: Puerto del servidor (default: 3000)
 - `DATABASE_URL`: URL de conexión a PostgreSQL
+- `REDIS_URL`: URL de conexión a Redis (Prioritaria; recomendada para Upstash o Railway)
+- `REDIS_HOST`/`PORT`/`PASSWORD`: Configuración individual de Redis (Fallback; recomendada para Docker/Local)
+- `JWT_SECRET`: Secreto para firmar tokens JWT (requerido; usar valor seguro en producción)
+- `JWT_EXPIRES_IN`: Expiración del token (ej. `7d`, `24h`; default: `7d`)
 
 Ver `.env.example` para más detalles.
+
+#### Railway y Upstash (despliegue)
+
+Para entornos en Railway (app) y Upstash (Redis), configura en el dashboard o CLI:
+
+- **Railway:** `NODE_ENV`, `PORT`, `DATABASE_URL` (Neon u otro PostgreSQL), `REDIS_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`. `DATABASE_URL` puede variar por rama (develop/production) si usas Neon branching.
+- **Upstash:** Proporciona `REDIS_URL`; úsala como variable en Railway (o en tu backend) para conectar la API al Redis de Upstash.
 
 ### Biome
 
