@@ -7,4 +7,4 @@ import { TenantsService } from './tenants.service';
   providers: [TenantsService],
   exports: [TenantsService],
 })
-export class TenantsModule {}
+export const TenantsModule = {};

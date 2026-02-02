@@ -8,4 +8,4 @@ import { PrismaHealthIndicator } from './prisma.health';
   controllers: [HealthController],
   providers: [PrismaHealthIndicator],
 })
-export class HealthModule {}
+export const HealthModule = {};
