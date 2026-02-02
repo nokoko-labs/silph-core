@@ -45,4 +45,4 @@ import { AppService } from './app.service';
   controllers: [AppController],
   providers: [AppService],
 })
-export const AppModule = {};
+export class AppModule {}

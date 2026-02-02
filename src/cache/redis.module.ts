@@ -8,4 +8,4 @@ import { RedisService } from './redis.service';
   providers: [RedisService],
   exports: [RedisService],
 })
-export const RedisModule = {};
+export class RedisModule {}

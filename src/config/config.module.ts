@@ -22,4 +22,4 @@ import { envSchema } from './env.schema';
   ],
   exports: [NestConfigModule],
 })
-export const ConfigModule = {};
+export class ConfigModule {}

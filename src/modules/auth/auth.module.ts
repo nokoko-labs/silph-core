@@ -28,4 +28,4 @@ import { LocalStrategy } from './strategies/local.strategy';
   providers: [AuthService, LocalStrategy, JwtStrategy, GoogleStrategy],
   exports: [AuthService],
 })
-export const AuthModule = {};
+export class AuthModule {}
