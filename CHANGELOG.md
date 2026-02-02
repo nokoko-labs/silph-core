@@ -1,11 +1,3 @@
-# 1.0.0 (2026-01-31)
-
-
-### Features
-
-* **auth:** implement third party tools ([#17](https://github.com/nokoko-labs/Silph-Core/issues/17)) ([5b569f0](https://github.com/nokoko-labs/Silph-Core/commit/5b569f05a43a7ef01d1854243909d68d7edac37a)), closes [hi#level](https://github.com/hi/issues/level)
-* **core:** init project structure, pnpm and database setup ([#1](https://github.com/nokoko-labs/Silph-Core/issues/1)) ([299fe7d](https://github.com/nokoko-labs/Silph-Core/commit/299fe7d139abb8a4ac8783d8f994e8ce6badf628))
-
 # [1.0.0-beta.2](https://github.com/nokoko-labs/Silph-Core/compare/v1.0.0-beta.1...v1.0.0-beta.2) (2026-01-31)
 
 

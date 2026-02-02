@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { Role } from '@prisma/client';
+import type { Response } from 'express';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import type { LoginPayload } from './dto/login.dto';
@@ -27,6 +28,9 @@ describe('AuthController', () => {
 
   const mockAuthService = {
     login: jest.fn().mockReturnValue({ access_token: 'mock-jwt-token' }),
+    getOAuthSuccessRedirectUrl: jest.fn(),
+    generateOAuthCode: jest.fn().mockResolvedValue('mock-oauth-code'),
+    exchangeOAuthCode: jest.fn().mockResolvedValue({ access_token: 'mock-jwt-token' }),
   };
 
   beforeEach(async () => {
@@ -61,6 +65,46 @@ describe('AuthController', () => {
       const result = controller.getProfile(mockJwtPayload);
 
       expect(result).toEqual(mockJwtPayload);
+    });
+  });
+
+  describe('googleAuthCallback', () => {
+    it('should redirect with code when redirectUrl is configured', async () => {
+      mockAuthService.getOAuthSuccessRedirectUrl.mockReturnValue('http://localhost:3000');
+      const req = { user: mockUser };
+      const res = {
+        redirect: jest.fn(),
+      } as unknown as Response;
+
+      await controller.googleAuthCallback(req, res);
+
+      expect(res.redirect).toHaveBeenCalledWith(302, 'http://localhost:3000/?code=mock-oauth-code');
+      expect(mockAuthService.generateOAuthCode).toHaveBeenCalledWith(mockUser);
+    });
+
+    it('should return JSON when redirectUrl is not configured', async () => {
+      mockAuthService.getOAuthSuccessRedirectUrl.mockReturnValue(undefined);
+      const req = { user: mockUser };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      } as unknown as Response;
+
+      await controller.googleAuthCallback(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ access_token: 'mock-jwt-token' });
+    });
+  });
+
+  describe('exchangeOAuthCode', () => {
+    it('should exchange code for JWT', async () => {
+      const payload = { code: 'some-code' };
+
+      const result = await controller.exchangeOAuthCode(payload);
+
+      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(mockAuthService.exchangeOAuthCode).toHaveBeenCalledWith('some-code');
     });
   });
 });
