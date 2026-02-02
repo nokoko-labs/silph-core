@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { type DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { RedisService } from '@/cache/redis.service';
 import { PrismaService } from '@/database/prisma.service';
 import { AuthService } from './auth.service';
@@ -13,7 +14,7 @@ jest.mock('bcryptjs', () => ({
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prisma: PrismaService;
+  let prisma: DeepMockProxy<PrismaService>;
   let jwtService: JwtService;
 
   const mockUser = {
@@ -26,11 +27,7 @@ describe('AuthService', () => {
     updatedAt: new Date(),
   };
 
-  const mockPrisma = {
-    user: {
-      findUnique: jest.fn().mockResolvedValue(mockUser),
-    },
-  };
+  const mockPrisma = mockDeep<PrismaService>();
 
   const mockJwtService = {
     sign: jest.fn().mockReturnValue('mock-jwt-token'),
@@ -52,6 +49,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     (bcrypt.compare as jest.Mock).mockClear().mockResolvedValue(true);
+    mockPrisma.user.findUnique.mockResolvedValue(mockUser);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -64,7 +62,7 @@ describe('AuthService', () => {
     }).compile();
 
     service = module.get<AuthService>(AuthService);
-    prisma = module.get<PrismaService>(PrismaService);
+    prisma = module.get(PrismaService);
     jwtService = module.get<JwtService>(JwtService);
   });
 
@@ -84,7 +82,7 @@ describe('AuthService', () => {
     });
 
     it('should return null when user not found', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+      prisma.user.findUnique.mockResolvedValue(null);
 
       const result = await service.validateUser('unknown@example.com', 'pass');
 
@@ -93,10 +91,11 @@ describe('AuthService', () => {
     });
 
     it('should return null when user has no password (OAuth-only)', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+      prisma.user.findUnique.mockResolvedValue({
         ...mockUser,
         password: null,
-      });
+        // biome-ignore lint/suspicious/noExplicitAny: needed for partial mock compatibility
+      } as any);
 
       const result = await service.validateUser('admin@example.com', 'any');
 
