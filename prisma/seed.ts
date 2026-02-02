@@ -112,5 +112,5 @@ async function main(): Promise<void> {
 
 main().catch((e) => {
   console.error('Seed failed:', e);
-  process.exit(1);
+  throw new Error(`Seed failed: ${e}`);
 });
