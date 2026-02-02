@@ -83,6 +83,18 @@ describe('AuthService', () => {
       expect(bcrypt.compare).not.toHaveBeenCalled();
     });
 
+    it('should return null when user has no password (OAuth-only)', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        ...mockUser,
+        password: null,
+      });
+
+      const result = await service.validateUser('admin@example.com', 'any');
+
+      expect(result).toBeNull();
+      expect(bcrypt.compare).not.toHaveBeenCalled();
+    });
+
     it('should return null when password does not match', async () => {
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
