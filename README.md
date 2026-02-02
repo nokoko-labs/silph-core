@@ -387,13 +387,23 @@ Redis se configura automáticamente usando las variables de entorno:
 
 ### Variables de Entorno
 
-Las variables de entorno se validan automáticamente al iniciar la aplicación usando Zod. Las variables requeridas son:
+Las variables de entorno se validan automáticamente al iniciar la aplicación. Las variables requeridas son:
 
-- `NODE_ENV`: Entorno de ejecución (`development`, `production`, `test`)
+- `NODE_ENV`: Entorno de ejecución (`dev`, `prod`, `test`)
 - `PORT`: Puerto del servidor (default: 3000)
 - `DATABASE_URL`: URL de conexión a PostgreSQL
+- `REDIS_URL`: URL de conexión a Redis (Upstash o Redis compatible)
+- `JWT_SECRET`: Secreto para firmar tokens JWT (requerido; usar valor seguro en producción)
+- `JWT_EXPIRES_IN`: Expiración del token (ej. `7d`, `24h`; default: `7d`)
 
 Ver `.env.example` para más detalles.
+
+#### Railway y Upstash (despliegue)
+
+Para entornos en Railway (app) y Upstash (Redis), configura en el dashboard o CLI:
+
+- **Railway:** `NODE_ENV`, `PORT`, `DATABASE_URL` (Neon u otro PostgreSQL), `REDIS_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`. `DATABASE_URL` puede variar por rama (develop/production) si usas Neon branching.
+- **Upstash:** Proporciona `REDIS_URL`; úsala como variable en Railway (o en tu backend) para conectar la API al Redis de Upstash.
 
 ### Biome
 
