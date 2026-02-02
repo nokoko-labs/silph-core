@@ -94,8 +94,7 @@ describe('AuthService', () => {
       prisma.user.findUnique.mockResolvedValue({
         ...mockUser,
         password: null,
-        // biome-ignore lint/suspicious/noExplicitAny: needed for partial mock compatibility
-      } as any);
+      } as User);
 
       const result = await service.validateUser('admin@example.com', 'any');
 

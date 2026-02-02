@@ -10,11 +10,11 @@ export class PaypalGateway implements PaymentGateway {
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: config used when createPreference/processWebhook are implemented
   constructor(private readonly config: PaypalPaymentConfig) {}
 
-  async createPreference(_amount: number, _externalId: string): Promise<unknown> {
+  static async createPreference(_amount: number, _externalId: string): Promise<unknown> {
     throw new NotImplementedException('PayPal createPreference not yet implemented');
   }
 
-  async processWebhook(_payload: unknown): Promise<unknown> {
+  static async processWebhook(_payload: unknown): Promise<unknown> {
     throw new NotImplementedException('PayPal processWebhook not yet implemented');
   }
 }
