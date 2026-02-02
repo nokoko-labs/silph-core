@@ -8,7 +8,6 @@ import { GoogleStrategy } from './google.strategy';
 describe('GoogleStrategy', () => {
   let strategy: GoogleStrategy;
   let authService: AuthService;
-  let _configService: ConfigService;
 
   const mockUser = {
     id: 'user-1',
@@ -56,7 +55,6 @@ describe('GoogleStrategy', () => {
 
     strategy = module.get<GoogleStrategy>(GoogleStrategy);
     authService = module.get<AuthService>(AuthService);
-    configService = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {
