@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Post, Request, Res, UseGuards, UsePipes } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Post,
+  Request,
+  Res,
+  UseGuards,
+  UsePipes,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { User } from '@prisma/client';
 import type { Response } from 'express';
@@ -22,8 +32,9 @@ export class AuthController {
   @Post('login')
   @UsePipes(new ZodValidationPipe(loginSchema))
   @UseGuards(LocalAuthGuard)
+  @HttpCode(200)
   @ApiOperation({ summary: 'Login with email and password' })
-  @ApiResponse({ status: 201, description: 'Returns JWT access token', type: LoginResponseDto })
+  @ApiResponse({ status: 200, description: 'Returns JWT access token', type: LoginResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid email or password' })
   login(@Request() req: { user: User }, @Body() _payload: LoginPayload) {
     return this.authService.login(req.user);
@@ -39,12 +50,14 @@ export class AuthController {
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
+  @HttpCode(200)
   @ApiOperation({ summary: 'Google OAuth callback; returns JWT or redirects to frontend' })
   @ApiResponse({
-    status: 201,
-    description: 'Returns OAuth code for redirect, or JWT if OAUTH_SUCCESS_REDIRECT_URL not set',
+    status: 200,
+    description: 'Returns JWT if OAUTH_SUCCESS_REDIRECT_URL not set',
     type: LoginResponseDto,
   })
+  @ApiResponse({ status: 302, description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL' })
   @ApiResponse({ status: 401, description: 'Google auth failed or not configured' })
   async googleAuthCallback(@Request() req: { user: User }, @Res() res: Response) {
     const redirectUrl = this.authService.getOAuthSuccessRedirectUrl();
@@ -57,7 +70,7 @@ export class AuthController {
     }
 
     const payload = this.authService.login(req.user);
-    return res.status(201).json(payload);
+    return res.status(200).json(payload);
   }
 
   @Post('oauth/exchange')

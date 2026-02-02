@@ -92,7 +92,7 @@ describe('AuthController', () => {
 
       await controller.googleAuthCallback(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(201);
+      expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ access_token: 'mock-jwt-token' });
     });
   });
