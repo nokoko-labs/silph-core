@@ -17,4 +17,6 @@ export const envSchema = Joi.object({
   GOOGLE_CALLBACK_URL: Joi.string().uri().optional().allow(''),
   OAUTH_DEFAULT_TENANT_ID: Joi.string().uuid().optional().allow(''),
   OAUTH_SUCCESS_REDIRECT_URL: Joi.string().uri().optional().allow(''),
+  ALLOWED_OAUTH_REDIRECT_DOMAINS: Joi.string().default(''),
+  OAUTH_CODE_EXPIRES_IN: Joi.number().integer().positive().default(60),
 });

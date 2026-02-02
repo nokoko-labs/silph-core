@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { RedisService } from '@/cache/redis.service';
 import { PrismaService } from '@/database/prisma.service';
 
 export type JwtPayload = {
@@ -18,6 +20,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<User | null> {
@@ -96,7 +99,80 @@ export class AuthService {
   }
 
   /** URL to redirect after OAuth success (SPA); undefined = return JSON. */
-  getOAuthSuccessRedirectUrl(): string | undefined {
-    return this.configService.get<string>('OAUTH_SUCCESS_REDIRECT_URL');
+  getOAuthSuccessRedirectUrl(requestedUrl?: string): string | undefined {
+    const defaultUrl = this.configService.get<string>('OAUTH_SUCCESS_REDIRECT_URL');
+    const urlToValidate = requestedUrl || defaultUrl;
+
+    if (!urlToValidate) return undefined;
+
+    if (this.validateRedirectUrl(urlToValidate)) {
+      return urlToValidate;
+    }
+
+    return undefined;
+  }
+
+  validateRedirectUrl(url: string): boolean {
+    const allowedDomains = this.configService
+      .get<string>('ALLOWED_OAUTH_REDIRECT_DOMAINS', '')
+      .split(',')
+      .map((d) => d.trim())
+      .filter((d) => d.length > 0);
+
+    if (allowedDomains.length === 0) return false;
+
+    try {
+      const parsedUrl = new URL(url);
+      return allowedDomains.some((domain) => {
+        // Support both exact origin match and hostname match
+        return (
+          parsedUrl.origin === domain ||
+          parsedUrl.hostname === domain ||
+          (domain.startsWith('.') && parsedUrl.hostname.endsWith(domain))
+        );
+      });
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  async generateOAuthCode(user: User): Promise<string> {
+    const code = randomBytes(32).toString('hex');
+    const expiresIn = this.configService.get<number>('OAUTH_CODE_EXPIRES_IN', 60);
+
+    const data = JSON.stringify({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      tenantId: user.tenantId,
+    });
+
+    await this.redisService.set(`oauth_code:${code}`, data, expiresIn);
+    return code;
+  }
+
+  async exchangeOAuthCode(code: string): Promise<{ access_token: string }> {
+    const key = `oauth_code:${code}`;
+    const data = await this.redisService.get(key);
+
+    if (!data) {
+      throw new UnauthorizedException('Invalid or expired OAuth code');
+    }
+
+    await this.redisService.del(key);
+
+    const userPayload = JSON.parse(data);
+    const payload: JwtPayload = {
+      sub: userPayload.userId,
+      email: userPayload.email,
+      role: userPayload.role,
+      tenantId: userPayload.tenantId,
+    };
+
+    const access_token = this.jwtService.sign(payload, {
+      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '7d'),
+    });
+
+    return { access_token };
   }
 }

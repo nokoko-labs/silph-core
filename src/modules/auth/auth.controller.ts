@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { type LoginPayload, loginSchema } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';
+import { OauthExchangeDto, oauthExchangeSchema } from './dto/oauth-exchange.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -41,19 +42,31 @@ export class AuthController {
   @ApiOperation({ summary: 'Google OAuth callback; returns JWT or redirects to frontend' })
   @ApiResponse({
     status: 201,
-    description: 'Returns JWT (or redirect if OAUTH_SUCCESS_REDIRECT_URL is set)',
+    description: 'Returns OAuth code for redirect, or JWT if OAUTH_SUCCESS_REDIRECT_URL not set',
     type: LoginResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Google auth failed or not configured' })
   async googleAuthCallback(@Request() req: { user: User }, @Res() res: Response) {
-    const payload = this.authService.login(req.user);
     const redirectUrl = this.authService.getOAuthSuccessRedirectUrl();
+
     if (redirectUrl) {
+      const code = await this.authService.generateOAuthCode(req.user);
       const url = new URL(redirectUrl);
-      url.searchParams.set('access_token', payload.access_token);
+      url.searchParams.set('code', code);
       return res.redirect(302, url.toString());
     }
+
+    const payload = this.authService.login(req.user);
     return res.status(201).json(payload);
+  }
+
+  @Post('oauth/exchange')
+  @UsePipes(new ZodValidationPipe(oauthExchangeSchema))
+  @ApiOperation({ summary: 'Exchange OAuth code for JWT' })
+  @ApiResponse({ status: 200, description: 'Returns JWT access token', type: LoginResponseDto })
+  @ApiResponse({ status: 401, description: 'Invalid or expired code' })
+  async exchangeOAuthCode(@Body() payload: OauthExchangeDto) {
+    return this.authService.exchangeOAuthCode(payload.code);
   }
 
   @Get('me')
