@@ -7,4 +7,4 @@ import { PaymentFactory } from './payment.factory';
   providers: [PaymentFactory],
   exports: [PaymentFactory],
 })
-export const PaymentsModule = {};
+export class PaymentsModule {}
