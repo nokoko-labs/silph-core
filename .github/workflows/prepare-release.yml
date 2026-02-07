@@ -1,0 +1,41 @@
+name: Prepare Release PR
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Pull Request
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. Check if a PR from develop to main already exists
+          EXISTING_PR=$(gh pr list --head develop --base main --json number --jq '.[0].number')
+
+          if [ -z "$EXISTING_PR" ]; then
+            echo "Creating new release PR from develop to main..."
+            
+            # Generate a title based on the date
+            PR_TITLE="chore: release develop to main $(date +'%Y-%m-%d')"
+            PR_BODY="This automated PR prepares the next version by merging changes from develop into main. Upon merging, semantic-release will automatically generate the corresponding tag and changelog."
+            
+            gh pr create \
+              --base main \
+              --head develop \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY" \
+              --label "release"
+          else
+            echo "A PR already exists (#$EXISTING_PR). No action required."
+          fi
