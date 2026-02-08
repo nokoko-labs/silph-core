@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
 /**
@@ -12,9 +13,9 @@ export const loginSchema = z.object({
 export type LoginPayload = z.infer<typeof loginSchema>;
 
 /**
- * DTO for Swagger documentation of POST /auth/login body.
+ * DTO for POST /auth/login body; validation and OpenAPI from loginSchema.
  */
-export class LoginDto {
+export class LoginDto extends createZodDto(loginSchema) {
   @ApiProperty({
     description: 'User email address',
     example: 'admin@example.com',
