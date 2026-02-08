@@ -1,18 +1,17 @@
-/**
- * Example DTO to demonstrate Swagger CLI plugin auto-generation.
- * The plugin will automatically generate Swagger documentation
- * without needing @ApiProperty() decorators.
- */
-export class HealthCheckDto {
-  /**
-   * Status message
-   * @example "OK"
-   */
-  status: string;
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-  /**
-   * Timestamp of the health check
-   * @example "2024-01-01T00:00:00.000Z"
-   */
-  timestamp: string;
-}
+/**
+ * Schema for root GET / response (health check).
+ */
+export const HealthCheckSchema = z.object({
+  status: z.string().describe('Status message'),
+  timestamp: z.string().describe('Timestamp of the health check (ISO 8601)'),
+});
+
+export type HealthCheckPayload = z.infer<typeof HealthCheckSchema>;
+
+/**
+ * DTO for root health check; validation and OpenAPI from HealthCheckSchema.
+ */
+export class HealthCheckDto extends createZodDto(HealthCheckSchema) {}
