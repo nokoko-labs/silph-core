@@ -29,18 +29,34 @@ jobs:
         with:
           node-version: 20
 
-      # Forzamos la instalación ignorando configuraciones de workspace externas
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-workspace
         env:
           COREPACK_ENABLE_STRICT: 0
 
       - name: Install Semantic Release globally
-        # Instalamos fuera del contexto de tu proyecto para evitar el error de "packages"
         run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/exec @semantic-release/github @semantic-release/npm
-
+      
+      - name: Generate Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+      
       - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # Ejecutamos el binario global
         run: semantic-release
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+      
+      - name: Sync main back to develop
+        if: success()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git checkout develop
+            git merge origin/main --ff-only || git merge origin/main --strategy-option theirs
+            git push origin develop
+          env:
+            GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

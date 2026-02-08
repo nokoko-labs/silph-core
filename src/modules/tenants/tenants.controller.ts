@@ -11,7 +11,7 @@ export class TenantsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new tenant' })
-  @ApiBody({ type: CreateTenantDto, description: 'Datos del tenant a crear' })
+  @ApiBody({ type: CreateTenantDto, description: 'Tenant data to create' })
   @ApiResponse({ status: 201, description: 'Tenant created successfully', type: TenantResponseDto })
   @ApiResponse({
     status: 400,
