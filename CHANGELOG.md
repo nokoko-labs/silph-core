@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/nokoko-labs/silph-core/compare/v1.0.1...v1.1.0) (2026-02-08)
+
+
+### Features
+
+* **modules:** enhance tenant creation and response DTOs with Swagger ([#32](https://github.com/nokoko-labs/silph-core/issues/32)) ([0be535d](https://github.com/nokoko-labs/silph-core/commit/0be535d7a1f0b27e469905dc2c652f77dc6c4cfd))
+
 # [1.1.0-beta.2](https://github.com/nokoko-labs/Silph-Core/compare/v1.1.0-beta.1...v1.1.0-beta.2) (2026-02-02)
 
 
