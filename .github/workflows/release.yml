@@ -57,7 +57,7 @@ jobs:
           git fetch origin develop
           git checkout develop
           
-          git merge origin/main --ff-only || git merge origin/main --strategy-option theirs
+          git merge origin/main --no-ff -m "chore(ci): sync main back to develop [skip ci]" || git merge origin/main --strategy-option theirs -m "chore(ci): sync main back to develop [skip ci]"
           
           git push origin develop
         env:
