@@ -1,16 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
 export const oauthExchangeSchema = z.object({
-  code: z.string().min(1, 'Code is required'),
+  code: z
+    .string()
+    .min(1, 'Code is required')
+    .describe('OAuth authorization code from Google callback redirect'),
 });
 
-export class OauthExchangeDto extends createZodDto(oauthExchangeSchema) {
-  @ApiProperty({
-    description: 'OAuth authorization code from Google callback redirect',
-    example: '4/0Aean...',
-    required: true,
-  })
-  code!: string;
-}
+export type OauthExchangePayload = z.infer<typeof oauthExchangeSchema>;
+
+export class OauthExchangeDto extends createZodDto(oauthExchangeSchema) {}

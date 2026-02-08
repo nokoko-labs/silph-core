@@ -1,34 +1,23 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
 /**
- * DTO for GET /health response (Terminus format).
+ * Schema for GET /health response (Terminus format).
  * When status is 'ok', info contains each indicator result; when 'error', error/details are present.
  */
-export class HealthResponseDto {
-  @ApiProperty({
-    description: 'Overall health status',
-    enum: ['ok', 'error'],
-    example: 'ok',
-  })
-  status!: 'ok' | 'error';
+export const HealthResponseSchema = z.object({
+  status: z.enum(['ok', 'error']).describe('Overall health status'),
+  info: z
+    .record(z.object({ status: z.string() }))
+    .optional()
+    .describe('Details of health indicators when status is ok'),
+  error: z.record(z.unknown()).optional().describe('Error summary when status is error'),
+  details: z
+    .record(z.unknown())
+    .optional()
+    .describe('Detailed indicator results when status is error'),
+});
 
-  @ApiProperty({
-    description: 'Details of health indicators when status is ok',
-    example: { database: { status: 'up' } },
-    required: false,
-  })
-  info?: Record<string, { status: string }>;
+export type HealthResponsePayload = z.infer<typeof HealthResponseSchema>;
 
-  @ApiProperty({
-    description: 'Error summary when status is error',
-    example: { database: { status: 'down' } },
-    required: false,
-  })
-  error?: Record<string, unknown>;
-
-  @ApiProperty({
-    description: 'Detailed indicator results when status is error',
-    required: false,
-  })
-  details?: Record<string, unknown>;
-}
+export class HealthResponseDto extends createZodDto(HealthResponseSchema) {}
