@@ -9,7 +9,7 @@ import {
   UseGuards,
   UsePipes,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import type { User } from '@prisma/client';
 import type { Response } from 'express';
 import { ZodValidationPipe } from 'nestjs-zod';
@@ -19,7 +19,7 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { LocalAuthGuard } from '@/common/guards/local-auth.guard';
 import type { JwtPayload } from './auth.service';
 import { AuthService } from './auth.service';
-import { type LoginPayload, loginSchema } from './dto/login.dto';
+import { LoginDto, type LoginPayload, loginSchema } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';
 import { OauthExchangeDto, oauthExchangeSchema } from './dto/oauth-exchange.dto';
@@ -34,8 +34,11 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @HttpCode(200)
   @ApiOperation({ summary: 'Login with email and password' })
+  @ApiBody({ type: LoginDto, description: 'Email and password' })
   @ApiResponse({ status: 200, description: 'Returns JWT access token', type: LoginResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid input (e.g. invalid email format)' })
   @ApiResponse({ status: 401, description: 'Invalid email or password' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   login(@Request() req: { user: User }, @Body() _payload: LoginPayload) {
     return this.authService.login(req.user);
   }
@@ -44,6 +47,8 @@ export class AuthController {
   @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Redirect to Google OAuth (social login)' })
   @ApiResponse({ status: 302, description: 'Redirects to Google consent screen' })
+  @ApiResponse({ status: 401, description: 'Google OAuth not configured' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   static googleAuth() {
     // Guard redirects to Google; no body executed
   }
@@ -59,6 +64,7 @@ export class AuthController {
   })
   @ApiResponse({ status: 302, description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL' })
   @ApiResponse({ status: 401, description: 'Google auth failed or not configured' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async googleAuthCallback(@Request() req: { user: User }, @Res() res: Response) {
     const redirectUrl = this.authService.getOAuthSuccessRedirectUrl();
 
@@ -76,8 +82,11 @@ export class AuthController {
   @Post('oauth/exchange')
   @UsePipes(new ZodValidationPipe(oauthExchangeSchema))
   @ApiOperation({ summary: 'Exchange OAuth code for JWT' })
+  @ApiBody({ type: OauthExchangeDto, description: 'OAuth code from callback redirect' })
   @ApiResponse({ status: 200, description: 'Returns JWT access token', type: LoginResponseDto })
+  @ApiResponse({ status: 400, description: 'Invalid input (e.g. missing or empty code)' })
   @ApiResponse({ status: 401, description: 'Invalid or expired code' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   async exchangeOAuthCode(@Body() payload: OauthExchangeDto) {
     return this.authService.exchangeOAuthCode(payload.code);
   }
@@ -88,6 +97,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user from JWT' })
   @ApiResponse({ status: 200, description: 'Returns current user payload', type: MeResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized (missing or invalid token)' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
   getProfile(@CurrentUser() user: JwtPayload): JwtPayload {
     return user;
   }

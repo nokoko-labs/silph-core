@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { z } from 'zod';
 
 /**
@@ -9,3 +10,23 @@ export const loginSchema = z.object({
 });
 
 export type LoginPayload = z.infer<typeof loginSchema>;
+
+/**
+ * DTO for Swagger documentation of POST /auth/login body.
+ */
+export class LoginDto {
+  @ApiProperty({
+    description: 'User email address',
+    example: 'admin@example.com',
+    required: true,
+  })
+  email!: string;
+
+  @ApiProperty({
+    description: 'User password',
+    example: 'secret',
+    required: true,
+    minLength: 1,
+  })
+  password!: string;
+}

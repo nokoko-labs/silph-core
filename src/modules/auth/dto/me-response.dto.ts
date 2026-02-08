@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
@@ -11,4 +12,19 @@ export const MeResponseSchema = z.object({
   tenantId: z.string().describe('Tenant ID'),
 });
 
-export class MeResponseDto extends createZodDto(MeResponseSchema) {}
+export class MeResponseDto extends createZodDto(MeResponseSchema) {
+  @ApiProperty({
+    description: 'User ID (JWT subject)',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  sub!: string;
+
+  @ApiProperty({ description: 'User email', example: 'admin@example.com' })
+  email!: string;
+
+  @ApiProperty({ description: 'User role', enum: ['ADMIN', 'USER'], example: 'ADMIN' })
+  role!: 'ADMIN' | 'USER';
+
+  @ApiProperty({ description: 'Tenant ID', example: '550e8400-e29b-41d4-a716-446655440001' })
+  tenantId!: string;
+}

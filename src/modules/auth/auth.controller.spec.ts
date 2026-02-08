@@ -13,6 +13,7 @@ describe('AuthController', () => {
     id: 'user-uuid-1',
     email: 'admin@example.com',
     password: 'hashed-password',
+    googleId: null as string | null,
     role: 'ADMIN' as Role,
     tenantId: 'tenant-uuid-1',
     createdAt: new Date(),
