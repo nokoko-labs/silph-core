@@ -48,3 +48,15 @@ jobs:
         run: semantic-release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+      
+      - name: Sync main back to develop
+        if: success()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git checkout develop
+            git merge origin/main --ff-only || git merge origin/main --strategy-option theirs
+            git push origin develop
+          env:
+            GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
