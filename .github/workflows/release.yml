@@ -32,10 +32,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          rm -f pnpm-workspace.yaml 
+          pnpm install --frozen-lockfile
         env:
           COREPACK_ENABLE_STRICT: 0
 
@@ -53,11 +54,9 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Actualizamos las referencias locales
           git fetch origin develop
           git checkout develop
           
-          # Intentamos mergear los cambios de main (incluyendo el commit de versión)
           git merge origin/main --ff-only || git merge origin/main --strategy-option theirs
           
           git push origin develop
