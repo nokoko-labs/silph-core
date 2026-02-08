@@ -6,7 +6,11 @@ import { IsNotEmpty, IsString, Matches, MaxLength, MinLength } from 'class-valid
  * Slug must be lowercase alphanumeric with hyphens only (no spaces).
  */
 export class CreateTenantDto {
-  @ApiProperty({ example: 'Acme Corp', description: 'Display name of the tenant' })
+  @ApiProperty({
+    example: 'Acme Corp',
+    description: 'Display name of the tenant',
+    required: true,
+  })
   @IsString()
   @IsNotEmpty()
   @MinLength(1)
@@ -16,6 +20,7 @@ export class CreateTenantDto {
   @ApiProperty({
     example: 'acme-corp',
     description: 'Unique URL-friendly identifier (lowercase, numbers, hyphens only)',
+    required: true,
   })
   @IsString()
   @IsNotEmpty()
