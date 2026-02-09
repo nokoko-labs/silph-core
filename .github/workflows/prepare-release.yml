@@ -1,6 +1,12 @@
 name: Prepare Release PR
 on:
   workflow_dispatch:
+    inputs:
+      source_branch:
+        description: 'Branch to create the PR from'
+        required: true
+        default: 'develop'
+        type: string
 
 jobs:
   open-pr:
@@ -17,13 +23,38 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
+      
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Generate Changelog Preview
+        id: changelog
+        run: |
+          git fetch origin main --depth=100 
+          
+          echo "CHANGELOG_CONTENT<<EOF" >> $GITHUB_ENV
+          
+          CHANGES=$(git log origin/main..HEAD --oneline --no-merges | sed 's/^/* /')
+          
+          if [ -z "$CHANGES" ]; then
+            echo "* No new commits found (branches might be already in sync)." >> $GITHUB_ENV
+          else
+            echo "$CHANGES" >> $GITHUB_ENV
+          fi
+          
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Create Pull Request
         run: |
           gh pr create \
             --base main \
             --head develop \
-            --title "chore(release): develop to main sync" \
-            --body "This PR was automatically generated to prepare for the next release. Merging this PR (via Squash) will trigger the automated versioning and release process."
+            --title "chore(release): develop to main sync (${{ steps.date.outputs.date }})" \
+            --body "## 🚀 Changes in this Release
+          $CHANGELOG_CONTENT
+          
+          ---
+          *This PR was automatically generated. Merging via **Squash** will trigger the versioning process.*"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
