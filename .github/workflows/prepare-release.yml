@@ -25,9 +25,18 @@ jobs:
       - name: Generate Changelog Preview
         id: changelog
         run: |
-          # Obtenemos los commits y les damos formato de lista de Markdown
+          git fetch origin main --depth=100 
+          
           echo "CHANGELOG_CONTENT<<EOF" >> $GITHUB_ENV
-          git log origin/main..origin/develop --oneline --no-merges | sed 's/^/* /' >> $GITHUB_ENV
+          
+          CHANGES=$(git log origin/main..HEAD --oneline --no-merges | sed 's/^/* /')
+          
+          if [ -z "$CHANGES" ]; then
+            echo "* No new commits found (branches might be already in sync)." >> $GITHUB_ENV
+          else
+            echo "$CHANGES" >> $GITHUB_ENV
+          fi
+          
           echo "EOF" >> $GITHUB_ENV
 
       - name: Create Pull Request
