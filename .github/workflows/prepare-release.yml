@@ -24,9 +24,11 @@ jobs:
 
       - name: Generate Changelog Preview
         id: changelog
-        # Compara develop con main para ver qué commits nuevos hay
         run: |
-          echo "diff=$(git log origin/main..origin/develop --oneline --no-merges | sed ':a;N;$!ba;s/\n/\\n/g')" >> $GITHUB_OUTPUT
+          # Obtenemos los commits y les damos formato de lista de Markdown
+          echo "CHANGELOG_CONTENT<<EOF" >> $GITHUB_ENV
+          git log origin/main..origin/develop --oneline --no-merges | sed 's/^/* /' >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
 
       - name: Create Pull Request
         run: |
@@ -34,6 +36,10 @@ jobs:
             --base main \
             --head develop \
             --title "chore(release): develop to main sync (${{ steps.date.outputs.date }})" \
-            --body "## 🚀 Changes in this Release\n${{ steps.changelog.outputs.diff }}\n\n---\n*This PR was automatically generated. Merging via **Squash** will trigger the versioning process.*"
+            --body "## 🚀 Changes in this Release
+          $CHANGELOG_CONTENT
+          
+          ---
+          *This PR was automatically generated. Merging via **Squash** will trigger the versioning process.*"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
