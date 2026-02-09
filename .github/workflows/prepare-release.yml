@@ -1,6 +1,12 @@
 name: Prepare Release PR
 on:
   workflow_dispatch:
+    inputs:
+      source_branch:
+        description: 'Branch to create the PR from'
+        required: true
+        default: 'develop'
+        type: string
 
 jobs:
   open-pr:
