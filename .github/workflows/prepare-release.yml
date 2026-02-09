@@ -22,12 +22,18 @@ jobs:
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
+      - name: Generate Changelog Preview
+        id: changelog
+        # Compara develop con main para ver qué commits nuevos hay
+        run: |
+          echo "diff=$(git log origin/main..origin/develop --oneline --no-merges | sed ':a;N;$!ba;s/\n/\\n/g')" >> $GITHUB_OUTPUT
+
       - name: Create Pull Request
         run: |
           gh pr create \
             --base main \
             --head develop \
             --title "chore(release): develop to main sync (${{ steps.date.outputs.date }})" \
-            --body "This PR was automatically generated to prepare for the next release. Merging this PR (via Squash) will trigger the automated versioning and release process."
+            --body "## 🚀 Changes in this Release\n${{ steps.changelog.outputs.diff }}\n\n---\n*This PR was automatically generated. Merging via **Squash** will trigger the versioning process.*"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
