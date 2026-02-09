@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UsePipes } from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ZodValidationPipe } from 'nestjs-zod';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { TenantResponseDto } from './dto/tenant-response.dto';
 import { TenantsService } from './tenants.service';
@@ -10,8 +11,18 @@ export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Post()
+  @UsePipes(new ZodValidationPipe(CreateTenantDto))
   @ApiOperation({ summary: 'Create a new tenant' })
-  @ApiBody({ type: CreateTenantDto, description: 'Tenant data to create' })
+  @ApiBody({
+    type: CreateTenantDto,
+    description: 'Tenant data to create',
+    examples: {
+      acme: {
+        summary: 'Acme Corp',
+        value: { name: 'Acme Corp', slug: 'acme-corp' },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Tenant created successfully', type: TenantResponseDto })
   @ApiResponse({
     status: 400,

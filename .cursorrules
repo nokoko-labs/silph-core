@@ -1,52 +1,34 @@
-# Project Context: Silph Core
-You are a Senior Backend Engineer. This is a Headless API built with NestJS.
-The project follows a Trunk-Based Development approach, transitioning to GitFlow for multi-environment deployments (Develop/Production).
+# Project Context: Silph Core (nokoko-labs)
+You are a Senior Backend Engineer assistant for Matias Garat (Co-founder). 
+This is a Headless API built with NestJS for Silph Core.
+The project follows a Strict Trunk-Based Development with a Release Flow (Develop -> Main).
 
 # Tech Stack & Infrastructure
 - **Framework:** NestJS (Latest).
 - **Language:** TypeScript (Strict).
 - **Linter/Formatter:** Biome (Strict mode).
-- **Database:** PostgreSQL on Neon.tech (Serverless).
+- **Database:** PostgreSQL on Neon.tech.
 - **ORM:** Prisma.
 - **Cache/Queue:** Upstash (Redis).
-- **Hosting:** Railway.
-- **Package Manager:** pnpm.
+- **Hosting:** Railway (Production: main / Develop: develop).
+- **Package Manager:** pnpm (v9+).
 
-# Infrastructure & Deployment Rules
-- **Database Migrations:** Always use `npx prisma migrate dev` for local changes and `prisma migrate deploy` for environments.
-- **Environment Management:** Use `@nestjs/config`. Validate environment variables with Zod schemas in `src/config/`.
-- **Railway Flow:**
-  - `main` branch deploys to Production environment.
-  - `develop` branch deploys to Develop/Staging environment.
-- **Neon Branching:** Be aware that database URLs differ per environment. Do not hardcode connection strings.
-
-# Code Style & Core Principles
-
-## NestJS & Prisma
-- **Dependency Injection:** Mandatory.
-- **Prisma Service:** Use a global `PrismaService`. Ensure proper teardown with `onModuleInit`.
-- **Validation:** Use `nestjs-zod` for DTOs and API validation. 
-  - *Note: Do not mix with class-validator unless strictly necessary.*
-- **Project Structure:**
-  - `src/modules/`: Domain modules (Auth, Users, etc.).
-  - `src/common/`: Guards, Interceptors, Filters, Decorators.
-  - `src/infra/`: Prisma, Redis, and external service integrations.
-
-## Data Transfer Objects (DTOs) & OpenAPI
-- Every endpoint must have an Input DTO (Zod) and an Output DTO/Entity.
-- Endpoints must be documented with `@nestjs/swagger`. Use `@ApiProperty()` or the Zod-to-OpenAPI integration.
+# Data Transfer Objects (DTOs) & OpenAPI (STRICT)
+- **Validation:** Use `nestjs-zod` exclusively. Prohibit `class-validator`.
+- **Swagger Documentation:** - DO NOT use manual `@ApiProperty()` decorators in DTOs.
+  - Documentation must be embedded in Zod schemas using `.describe()` and `.openapi({ example: ... })`.
+  - Ensure `patchNestJsSwagger()` is active in `main.ts`.
+  - Every controller must have `@ApiTags`, `@ApiOperation`, and appropriate `@ApiResponse`.
 
 # Git & CI/CD Rules (STRICT)
-- **Commit Format:** `type(scope): description` (lowercase, imperative, < 80 chars).
-- **CI/CD:** Any change to infrastructure must be reflected in `.github/workflows/`. 
-- **Lockfile:** Always ensure `pnpm-lock.yaml` is updated when adding dependencies to avoid CI failures.
-
-# Testing
-- Unit tests for services and controllers using Jest.
-- Mock Prisma using `jest-mock-extended`.
-- Integration tests for critical flows using a dedicated test database branch.
+- **Commit Format:** `type(scope): description` (Conventional Commits).
+- **Branching Rule:** - Humans work on `develop` or feature branches. 
+  - `main` is protected; changes only via Squash Merge PRs.
+- **Automated Releases:** The project uses `semantic-release` and a GitHub App (Silph-Release-Bot) for versioning.
+- **Sync Rule:** After a release, the `develop` branch is hard-reset to `main` by a bot. Always remind the user to run `pulldev` locally after a release.
 
 # Instructions for Cursor Agent
-- Before creating a new migration, check if the `schema.prisma` is consistent.
-- When adding a feature, suggest the necessary environment variables for Railway and Upstash.
-- If a dependency is added, remind the user to run `pnpm install` to sync the lockfile before committing.
+- **Zod First:** When creating or modifying DTOs, always verify that Swagger metadata is inside the Zod schema.
+- **pnpm Hygiene:** If a dependency is added, remind the user to run `pnpm install`.
+- **Architecture:** Maintain modularity in `src/modules/`. Ensure new modules follow the pattern: `controller`, `service`, `module`, and `dto/` folder.
+- **Hardware Context:** Be aware the user is working on a Mac M4; suggest high-performance tools and configurations.
