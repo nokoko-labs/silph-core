@@ -17,13 +17,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
+      
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request
         run: |
           gh pr create \
             --base main \
             --head develop \
-            --title "chore(release): develop to main sync" \
+            --title "chore(release): develop to main sync (${{ steps.date.outputs.date }})" \
             --body "This PR was automatically generated to prepare for the next release. Merging this PR (via Squash) will trigger the automated versioning and release process."
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
