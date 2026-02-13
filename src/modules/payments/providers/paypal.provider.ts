@@ -1,6 +1,6 @@
 import { NotImplementedException } from '@nestjs/common';
-import type { PaymentGateway } from '../interfaces/payment-gateway.interface';
-import type { PaypalPaymentConfig } from '../interfaces/tenant-payment-config.interface';
+import { PaymentGateway } from '../interfaces/payment-gateway.interface';
+import { PaypalPaymentConfig } from '../interfaces/tenant-payment-config.interface';
 
 /**
  * PayPal payment gateway implementation.

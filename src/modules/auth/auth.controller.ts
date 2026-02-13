@@ -10,15 +10,14 @@ import {
   UsePipes,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import type { User } from '@prisma/client';
-import type { Response } from 'express';
+import { User } from '@prisma/client';
+import { Response } from 'express';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { GoogleAuthGuard } from '@/common/guards/google-auth.guard';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { LocalAuthGuard } from '@/common/guards/local-auth.guard';
-import type { JwtPayload } from './auth.service';
-import { AuthService } from './auth.service';
+import { AuthService, JwtPayload } from './auth.service';
 import { LoginDto, type LoginPayload, loginSchema } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';

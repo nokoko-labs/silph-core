@@ -1,5 +1,5 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
-import type { JwtPayload } from '@/modules/auth/auth.service'; // type-only to avoid circular dependency
+import { JwtPayload } from '@/modules/auth/auth.service'; // type-only to avoid circular dependency
 
 /**
  * Extracts the JWT user payload from the request (set by JwtStrategy).

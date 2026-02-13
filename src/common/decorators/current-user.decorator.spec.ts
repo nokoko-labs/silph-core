@@ -1,5 +1,5 @@
 import { ExecutionContext } from '@nestjs/common';
-import type { JwtPayload } from '@/modules/auth/auth.service';
+import { JwtPayload } from '@/modules/auth/auth.service';
 import { getCurrentUserFromContext } from './current-user.decorator';
 
 const testPayload: JwtPayload = {

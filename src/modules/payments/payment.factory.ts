@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { TenantsService } from '@/modules/tenants/tenants.service';
-import type { PaymentGateway } from './interfaces/payment-gateway.interface';
+import { PaymentGateway } from './interfaces/payment-gateway.interface';
 import { tenantPaymentConfigSchema } from './interfaces/tenant-payment-config.interface';
 import { MercadoPagoGateway } from './providers/mercadopago.provider';
 import { PaypalGateway } from './providers/paypal.provider';

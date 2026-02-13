@@ -1,9 +1,9 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { Role } from '@prisma/client';
-import type { Response } from 'express';
+import { Response } from 'express';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import type { LoginPayload } from './dto/login.dto';
+import { LoginPayload } from './dto/login.dto';
 
 describe('AuthController', () => {
   let controller: AuthController;

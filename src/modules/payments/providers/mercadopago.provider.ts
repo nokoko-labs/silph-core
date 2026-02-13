@@ -1,6 +1,6 @@
 import { NotImplementedException } from '@nestjs/common';
-import type { PaymentGateway } from '../interfaces/payment-gateway.interface';
-import type { MercadopagoPaymentConfig } from '../interfaces/tenant-payment-config.interface';
+import { PaymentGateway } from '../interfaces/payment-gateway.interface';
+import { MercadopagoPaymentConfig } from '../interfaces/tenant-payment-config.interface';
 
 /**
  * MercadoPago payment gateway implementation.
