@@ -98,4 +98,59 @@ describe('TenantsService', () => {
       );
     });
   });
+
+  describe('findBySlug', () => {
+    it('should return a tenant by slug', async () => {
+      const result = await service.findBySlug(mockTenant.slug);
+
+      expect(result).toEqual(mockTenant);
+      expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
+        where: { slug: mockTenant.slug },
+      });
+    });
+
+    it('should throw NotFoundException when tenant slug does not exist', async () => {
+      prisma.tenant.findUnique.mockResolvedValue(null);
+
+      await expect(service.findBySlug('non-existent-slug')).rejects.toThrow(NotFoundException);
+      await expect(service.findBySlug('non-existent-slug')).rejects.toThrow(
+        'Tenant with slug "non-existent-slug" not found',
+      );
+    });
+  });
+
+  describe('update', () => {
+    const updateDto = { name: 'Acme Updated' };
+
+    it('should update a tenant', async () => {
+      mockPrisma.tenant.update.mockResolvedValue({ ...mockTenant, ...updateDto });
+
+      const result = await service.update(mockTenant.id, updateDto);
+
+      expect(result.name).toEqual(updateDto.name);
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: mockTenant.id },
+        data: updateDto,
+      });
+    });
+
+    it('should throw ConflictException when updating slug to an existing one', async () => {
+      const dto = { slug: 'already-exists' };
+      prisma.tenant.update.mockRejectedValue(createPrismaP2002Error());
+
+      await expect(service.update(mockTenant.id, dto)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove a tenant', async () => {
+      mockPrisma.tenant.delete.mockResolvedValue(mockTenant);
+
+      await service.remove(mockTenant.id);
+
+      expect(prisma.tenant.delete).toHaveBeenCalledWith({
+        where: { id: mockTenant.id },
+      });
+    });
+  });
 });

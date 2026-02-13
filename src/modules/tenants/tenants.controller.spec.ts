@@ -21,6 +21,9 @@ describe('TenantsController', () => {
     create: jest.fn().mockResolvedValue(mockTenant),
     findAll: jest.fn().mockResolvedValue([mockTenant]),
     findOne: jest.fn().mockResolvedValue(mockTenant),
+    findBySlug: jest.fn().mockResolvedValue(mockTenant),
+    update: jest.fn().mockResolvedValue(mockTenant),
+    remove: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -71,6 +74,36 @@ describe('TenantsController', () => {
       );
 
       await expect(controller.findOne('bad-id')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findBySlug', () => {
+    it('should return a tenant by slug', async () => {
+      const result = await controller.findBySlug(mockTenant.slug);
+
+      expect(result).toEqual(mockTenant);
+      expect(service.findBySlug).toHaveBeenCalledWith(mockTenant.slug);
+    });
+  });
+
+  describe('update', () => {
+    it('should update a tenant and return it', async () => {
+      const dto = { name: 'Acme Updated' };
+      const updatedTenant = { ...mockTenant, ...dto };
+      (service.update as jest.Mock).mockResolvedValue(updatedTenant);
+
+      const result = await controller.update(mockTenant.id, dto);
+
+      expect(result).toEqual(updatedTenant);
+      expect(service.update).toHaveBeenCalledWith(mockTenant.id, dto);
+    });
+  });
+
+  describe('remove', () => {
+    it('should remove a tenant', async () => {
+      await controller.remove(mockTenant.id);
+
+      expect(service.remove).toHaveBeenCalledWith(mockTenant.id);
     });
   });
 });
