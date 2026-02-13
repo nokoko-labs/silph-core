@@ -17,6 +17,13 @@ export class RolesGuard implements CanActivate {
       return true;
     }
     const { user } = context.switchToHttp().getRequest<{ user: JwtPayload }>();
-    return requiredRoles.some((role) => user?.role === role);
+    if (!user || !user.role) {
+      return false;
+    }
+    // SUPER_ADMIN has access to all roles
+    if (user.role === Role.SUPER_ADMIN) {
+      return true;
+    }
+    return requiredRoles.some((role) => user.role === role);
   }
 }

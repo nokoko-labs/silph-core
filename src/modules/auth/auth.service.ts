@@ -33,7 +33,8 @@ export class AuthService {
       !user ||
       !user.password ||
       !['ACTIVE', 'PENDING'].includes(user.status) ||
-      user.tenant.deletedAt
+      user.tenant.deletedAt ||
+      user.tenant.status !== 'ACTIVE'
     ) {
       return null;
     }
@@ -102,8 +103,10 @@ export class AuthService {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: defaultTenantId, deletedAt: null },
     });
-    if (!tenant) {
-      throw new Error(`OAUTH_DEFAULT_TENANT_ID (${defaultTenantId}) does not exist or is deleted`);
+    if (!tenant || tenant.status !== 'ACTIVE') {
+      throw new Error(
+        `OAUTH_DEFAULT_TENANT_ID (${defaultTenantId}) does not exist, is deleted or is not ACTIVE`,
+      );
     }
 
     const newUser = await this.prisma.user.create({

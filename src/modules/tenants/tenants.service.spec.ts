@@ -20,7 +20,7 @@ describe('TenantsService', () => {
     id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'Acme Corp',
     slug: 'acme-corp',
-    isActive: true,
+    status: 'ACTIVE',
     config: null,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -54,7 +54,7 @@ describe('TenantsService', () => {
 
       expect(result).toEqual(mockTenant);
       expect(prisma.tenant.create).toHaveBeenCalledWith({
-        data: { name: dto.name, slug: dto.slug },
+        data: { name: dto.name, slug: dto.slug, status: 'ACTIVE' },
       });
     });
 
@@ -155,7 +155,10 @@ describe('TenantsService', () => {
 
       expect(prisma.tenant.update).toHaveBeenCalledWith({
         where: { id: mockTenant.id },
-        data: { deletedAt: expect.any(Date) },
+        data: {
+          status: 'DELETED',
+          deletedAt: expect.any(Date),
+        },
       });
       expect(prisma.user.updateMany).toHaveBeenCalledWith({
         where: { tenantId: mockTenant.id, deletedAt: null },

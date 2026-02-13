@@ -18,6 +18,7 @@ export class TenantsService {
         data: {
           name: dto.name,
           slug: dto.slug,
+          status: 'ACTIVE',
         },
       });
     } catch (error) {
@@ -92,7 +93,10 @@ export class TenantsService {
       // 1. Soft delete tenant
       await tx.tenant.update({
         where: { id },
-        data: { deletedAt: new Date() },
+        data: {
+          status: 'DELETED',
+          deletedAt: new Date(),
+        },
       });
 
       // 2. Soft delete all non-deleted users in this tenant

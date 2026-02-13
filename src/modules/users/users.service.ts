@@ -39,9 +39,23 @@ export class UsersService {
     });
   }
 
-  async findOne(id: string): Promise<User> {
+  async findOne(id: string, tenantId?: string): Promise<User> {
+    const where: Prisma.UserWhereUniqueInput = { id, deletedAt: null };
+    if (tenantId) {
+      // For multi-tenancy enforcement if needed at service level
+      // Note: findUnique doesn't support additional filters in 'where' besides the unique key
+      // using findFirst for combined filters
+      const user = await this.prisma.user.findFirst({
+        where: { id, tenantId, deletedAt: null },
+      });
+      if (!user) {
+        throw new NotFoundException(`User with id "${id}" not found in this tenant`);
+      }
+      return user;
+    }
+
     const user = await this.prisma.user.findUnique({
-      where: { id, deletedAt: null },
+      where,
     });
     if (!user) {
       throw new NotFoundException(`User with id "${id}" not found`);
@@ -85,9 +99,28 @@ export class UsersService {
   }
 
   async remove(id: string): Promise<User> {
+    const user = await this.findOne(id);
+
+    // If deleting an ADMIN, check if it's the last one in the tenant
+    if (user.role === 'ADMIN') {
+      const adminCount = await this.prisma.user.count({
+        where: {
+          tenantId: user.tenantId,
+          role: 'ADMIN',
+          deletedAt: null,
+        },
+      });
+
+      if (adminCount <= 1) {
+        throw new ConflictException(
+          'Cannot delete the last ADMIN of the tenant. Please delegate the role or delete the Tenant instead.',
+        );
+      }
+    }
+
     try {
       return await this.prisma.user.update({
-        where: { id, deletedAt: null },
+        where: { id },
         data: {
           status: 'DELETED',
           deletedAt: new Date(),

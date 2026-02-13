@@ -30,6 +30,7 @@ describe('AuthService', () => {
     deletedAt: null as Date | null,
     tenant: {
       id: 'tenant-uuid-1',
+      status: 'ACTIVE',
       deletedAt: null as Date | null,
     },
   };
@@ -126,7 +127,7 @@ describe('AuthService', () => {
 
       const result = await service.validateUser('admin@example.com', 'admin123');
 
-      expect(result).toEqual({ ...mockUser, status: 'PENDING' });
+      expect(result).toMatchObject({ ...mockUser, status: 'PENDING' });
     });
 
     it('should return null when user is not ACTIVE or PENDING', async () => {

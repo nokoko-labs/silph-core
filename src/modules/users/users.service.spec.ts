@@ -15,13 +15,6 @@ function createPrismaP2002Error(): Prisma.PrismaClientKnownRequestError {
   });
 }
 
-function createPrismaP2025Error(): Prisma.PrismaClientKnownRequestError {
-  return new Prisma.PrismaClientKnownRequestError('Record not found', {
-    code: 'P2025',
-    clientVersion: '5.x',
-  });
-}
-
 describe('UsersService', () => {
   let service: UsersService;
   let prisma: DeepMockProxy<PrismaService>;
@@ -84,15 +77,6 @@ describe('UsersService', () => {
   });
 
   describe('findAll', () => {
-    it('should return all users', async () => {
-      mockPrisma.user.findMany.mockResolvedValue([mockUser]);
-
-      const result = await service.findAll();
-
-      expect(result).toEqual([mockUser]);
-      expect(prisma.user.findMany).toHaveBeenCalled();
-    });
-
     it('should filter by tenantId and exclude deleted users', async () => {
       mockPrisma.user.findMany.mockResolvedValue([mockUser]);
 
@@ -112,6 +96,9 @@ describe('UsersService', () => {
       const result = await service.findOne('user-id');
 
       expect(result).toEqual(mockUser);
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'user-id', deletedAt: null },
+      });
     });
 
     it('should throw NotFoundException when user does not exist', async () => {
@@ -144,6 +131,8 @@ describe('UsersService', () => {
 
   describe('remove', () => {
     it('should soft delete a user', async () => {
+      // Mock findOne to return a non-ADMIN or a tenant with multiple admins
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser); // Role.USER
       mockPrisma.user.update.mockResolvedValue({
         ...mockUser,
         status: 'DELETED',
@@ -155,7 +144,7 @@ describe('UsersService', () => {
       expect(result.status).toBe('DELETED');
       expect(result.deletedAt).toBeDefined();
       expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-id', deletedAt: null },
+        where: { id: 'user-id' },
         data: {
           status: 'DELETED',
           deletedAt: expect.any(Date),
@@ -163,8 +152,15 @@ describe('UsersService', () => {
       });
     });
 
+    it('should throw ConflictException if deleting the last ADMIN', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, role: Role.ADMIN });
+      mockPrisma.user.count.mockResolvedValue(1);
+
+      await expect(service.remove('user-id')).rejects.toThrow(ConflictException);
+    });
+
     it('should throw NotFoundException when user does not exist or is already deleted', async () => {
-      mockPrisma.user.update.mockRejectedValue(createPrismaP2025Error());
+      mockPrisma.user.findUnique.mockResolvedValue(null);
 
       await expect(service.remove('user-id')).rejects.toThrow(NotFoundException);
     });

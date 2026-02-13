@@ -17,8 +17,10 @@ import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nes
 import { Role } from '@prisma/client';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
+import { OwnershipGuard } from '@/common/guards/ownership.guard';
 import { RolesGuard } from '@/common/guards/roles.guard';
 import { JwtPayload } from '@/modules/auth/auth.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
@@ -32,8 +34,9 @@ export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Post()
+  @Public()
   @UsePipes(new ZodValidationPipe(CreateTenantDto))
-  @ApiOperation({ summary: 'Create a new tenant' })
+  @ApiOperation({ summary: 'Create a new tenant (Public)' })
   @ApiBody({
     type: CreateTenantDto,
     description: 'Tenant data to create',
@@ -59,7 +62,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
-  @ApiOperation({ summary: 'List all tenants' })
+  @ApiOperation({ summary: 'List all tenants (Super Admin only)' })
   @ApiResponse({
     status: 200,
     description: 'List of tenants',
@@ -72,8 +75,8 @@ export class TenantsController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, OwnershipGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
   @ApiOperation({ summary: 'Get tenant by id' })
   @ApiResponse({ status: 200, description: 'Tenant found', type: TenantResponseDto })
@@ -84,14 +87,14 @@ export class TenantsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<TenantResponseDto> {
     if (user.status !== 'ACTIVE') {
-      throw new ForbiddenException('Only active admins can access this');
+      throw new ForbiddenException('Only active users can access this');
     }
     return this.tenantsService.findOne(id);
   }
 
   @Get('slug/:slug')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
   @ApiOperation({ summary: 'Get tenant by slug' })
   @ApiResponse({ status: 200, description: 'Tenant found', type: TenantResponseDto })
@@ -102,14 +105,21 @@ export class TenantsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<TenantResponseDto> {
     if (user.status !== 'ACTIVE') {
-      throw new ForbiddenException('Only active admins can access this');
+      throw new ForbiddenException('Only active users can access this');
     }
-    return this.tenantsService.findBySlug(slug);
+    const tenant = await this.tenantsService.findBySlug(slug);
+
+    // Manual ownership check for by-slug route as it's not ID-based
+    if (user.role !== Role.SUPER_ADMIN && user.tenantId !== tenant.id) {
+      throw new ForbiddenException('You do not have access to this tenant resource');
+    }
+
+    return tenant;
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard, OwnershipGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
   @UsePipes(new ZodValidationPipe(UpdateTenantDto))
   @ApiOperation({ summary: 'Update a tenant' })
@@ -124,17 +134,17 @@ export class TenantsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<TenantResponseDto> {
     if (user.status !== 'ACTIVE') {
-      throw new ForbiddenException('Only active admins can access this');
+      throw new ForbiddenException('Only active users can access this');
     }
     return this.tenantsService.update(id, dto);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a tenant' })
+  @ApiOperation({ summary: 'Delete a tenant (Super Admin only)' })
   @ApiResponse({ status: 204, description: 'Tenant deleted successfully' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
@@ -143,7 +153,7 @@ export class TenantsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
     if (user.status !== 'ACTIVE') {
-      throw new ForbiddenException('Only active admins can access this');
+      throw new ForbiddenException('Only active users can access this');
     }
     return this.tenantsService.remove(id);
   }

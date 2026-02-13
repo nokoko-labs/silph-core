@@ -1,3 +1,4 @@
+import { TenantStatus } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
@@ -9,7 +10,7 @@ export const TenantResponseSchema = z.object({
   id: z.string().uuid().describe('Tenant UUID'),
   name: z.string().describe('Display name'),
   slug: z.string().describe('URL-friendly identifier'),
-  isActive: z.boolean().default(true).describe('Whether the tenant is active'),
+  status: z.nativeEnum(TenantStatus).describe('Current status of the tenant'),
   config: z.any().nullable().optional().describe('Optional tenant configuration'),
   createdAt: z.date().describe('Creation timestamp'),
   updatedAt: z.date().describe('Last update timestamp'),

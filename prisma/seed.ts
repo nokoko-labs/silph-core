@@ -1,5 +1,5 @@
 import { faker } from '@faker-js/faker';
-import { PrismaClient, Role, UserStatus } from '@prisma/client';
+import { PrismaClient, Role, TenantStatus, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -17,7 +17,7 @@ async function main() {
     create: {
       name: 'Mushroom Kingdom',
       slug: 'mushroom-kingdom',
-      isActive: true,
+      status: TenantStatus.ACTIVE,
       config: { color: 'red', icon: 'mushroom' },
     },
   });
@@ -65,7 +65,7 @@ async function main() {
     create: {
       name: 'Castle Grayskull',
       slug: 'castle-grayskull',
-      isActive: true,
+      status: TenantStatus.ACTIVE,
       config: { color: 'green', icon: 'skull' },
     },
   });
@@ -116,12 +116,12 @@ async function main() {
     where: { slug: 'hill-valley' },
     update: {
       deletedAt: new Date('1985-10-26T01:21:00Z'),
-      isActive: false,
+      status: TenantStatus.DELETED,
     },
     create: {
       name: 'Hill Valley',
       slug: 'hill-valley',
-      isActive: false,
+      status: TenantStatus.DELETED,
       deletedAt: new Date('1985-10-26T01:21:00Z'),
       config: { color: 'blue', icon: 'delorean' },
     },
