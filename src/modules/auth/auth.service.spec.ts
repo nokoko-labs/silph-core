@@ -2,7 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { Role, type User } from '@prisma/client';
+import { type Account, Role, type User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { type DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { RedisService } from '@/cache/redis.service';
@@ -122,7 +122,7 @@ describe('AuthService', () => {
       prisma.user.findFirst.mockResolvedValue({
         ...mockUser,
         status: 'PENDING',
-      } as any);
+      } as unknown as User);
 
       const result = await service.validateUser('admin@example.com', 'admin123');
 
@@ -133,7 +133,7 @@ describe('AuthService', () => {
       prisma.user.findFirst.mockResolvedValue({
         ...mockUser,
         status: 'SUSPENDED',
-      } as any);
+      } as unknown as User);
 
       const result = await service.validateUser('admin@example.com', 'any');
 
@@ -145,7 +145,7 @@ describe('AuthService', () => {
         ...mockUser,
         status: 'DELETED',
         deletedAt: new Date(),
-      } as any);
+      } as unknown as User);
 
       const result = await service.validateUser('admin@example.com', 'any');
 
@@ -159,7 +159,7 @@ describe('AuthService', () => {
           ...mockUser.tenant,
           deletedAt: new Date(),
         },
-      } as any);
+      } as unknown as User);
 
       const result = await service.validateUser('admin@example.com', 'any');
 
@@ -177,7 +177,7 @@ describe('AuthService', () => {
     it('should return user if account already exists and is ACTIVE', async () => {
       mockPrisma.account.findUnique.mockResolvedValue({
         user: { ...mockUser, status: 'ACTIVE' },
-      } as any);
+      } as unknown as Account);
 
       const result = await service.findOrCreateFromGoogle(profile);
       expect(result.status).toBe('ACTIVE');
@@ -186,7 +186,7 @@ describe('AuthService', () => {
     it('should return user if account already exists and is PENDING', async () => {
       mockPrisma.account.findUnique.mockResolvedValue({
         user: { ...mockUser, status: 'PENDING' },
-      } as any);
+      } as unknown as Account);
 
       const result = await service.findOrCreateFromGoogle(profile);
       expect(result.status).toBe('PENDING');
@@ -195,15 +195,18 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException if account already exists but is SUSPENDED', async () => {
       mockPrisma.account.findUnique.mockResolvedValue({
         user: { ...mockUser, status: 'SUSPENDED' },
-      } as any);
+      } as unknown as Account);
 
       await expect(service.findOrCreateFromGoogle(profile)).rejects.toThrow(UnauthorizedException);
     });
 
     it('should return existing user if email matches and user is ACTIVE', async () => {
       mockPrisma.account.findUnique.mockResolvedValue(null);
-      mockPrisma.user.findFirst.mockResolvedValue({ ...mockUser, status: 'ACTIVE' } as any);
-      mockPrisma.account.create.mockResolvedValue({} as any);
+      mockPrisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        status: 'ACTIVE',
+      } as unknown as User);
+      mockPrisma.account.create.mockResolvedValue({} as unknown as Account);
 
       const result = await service.findOrCreateFromGoogle(profile);
       expect(result.status).toBe('ACTIVE');
@@ -211,7 +214,10 @@ describe('AuthService', () => {
 
     it('should throw UnauthorizedException if existing user matches but is SUSPENDED', async () => {
       mockPrisma.account.findUnique.mockResolvedValue(null);
-      mockPrisma.user.findFirst.mockResolvedValue({ ...mockUser, status: 'SUSPENDED' } as any);
+      mockPrisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        status: 'SUSPENDED',
+      } as unknown as User);
 
       await expect(service.findOrCreateFromGoogle(profile)).rejects.toThrow(UnauthorizedException);
     });
@@ -228,6 +234,7 @@ describe('AuthService', () => {
           email: mockUser.email,
           role: mockUser.role,
           tenantId: mockUser.tenantId,
+          status: mockUser.status,
         },
         { expiresIn: '7d' },
       );
@@ -275,6 +282,7 @@ describe('AuthService', () => {
         email: mockUser.email,
         role: mockUser.role,
         tenantId: mockUser.tenantId,
+        status: mockUser.status,
       });
       mockRedisService.get.mockResolvedValue(mockCodeData);
 

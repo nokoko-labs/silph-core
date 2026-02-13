@@ -29,10 +29,10 @@ export class UsersService {
     }
   }
 
-  async findAll(tenantId?: string): Promise<User[]> {
+  async findAll(tenantId: string): Promise<User[]> {
     return this.prisma.user.findMany({
       where: {
-        ...(tenantId ? { tenantId } : {}),
+        tenantId,
         deletedAt: null,
       },
       orderBy: { createdAt: 'desc' },

@@ -12,6 +12,7 @@ export type JwtPayload = {
   email: string;
   role: string;
   tenantId: string;
+  status: string;
 };
 
 @Injectable()
@@ -129,6 +130,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       tenantId: user.tenantId,
+      status: user.status,
     };
     const access_token = this.jwtService.sign(payload, {
       expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '7d'),
@@ -183,6 +185,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       tenantId: user.tenantId,
+      status: user.status,
     });
 
     await this.redisService.set(`oauth_code:${code}`, data, expiresIn);
@@ -205,6 +208,7 @@ export class AuthService {
       email: userPayload.email,
       role: userPayload.role,
       tenantId: userPayload.tenantId,
+      status: userPayload.status || 'ACTIVE', // Fallback for transition
     };
 
     const access_token = this.jwtService.sign(payload, {
