@@ -31,14 +31,17 @@ export class UsersService {
 
   async findAll(tenantId?: string): Promise<User[]> {
     return this.prisma.user.findMany({
-      where: tenantId ? { tenantId } : {},
+      where: {
+        ...(tenantId ? { tenantId } : {}),
+        deletedAt: null,
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async findOne(id: string): Promise<User> {
     const user = await this.prisma.user.findUnique({
-      where: { id },
+      where: { id, deletedAt: null },
     });
     if (!user) {
       throw new NotFoundException(`User with id "${id}" not found`);
@@ -53,6 +56,7 @@ export class UsersService {
           email,
           tenantId,
         },
+        deletedAt: null,
       },
     });
   }
@@ -82,8 +86,12 @@ export class UsersService {
 
   async remove(id: string): Promise<User> {
     try {
-      return await this.prisma.user.delete({
-        where: { id },
+      return await this.prisma.user.update({
+        where: { id, deletedAt: null },
+        data: {
+          status: 'DELETED',
+          deletedAt: new Date(),
+        },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {

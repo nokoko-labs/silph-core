@@ -22,9 +22,11 @@ describe('AuthService', () => {
     email: 'admin@example.com',
     password: 'hashed-password',
     role: 'ADMIN' as Role,
+    status: 'ACTIVE',
     tenantId: 'tenant-uuid-1',
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
   };
 
   const mockPrisma = mockDeep<PrismaService>();
@@ -71,12 +73,12 @@ describe('AuthService', () => {
   });
 
   describe('validateUser', () => {
-    it('should return user when email and password are valid', async () => {
+    it('should return user when email and password are valid and user is ACTIVE', async () => {
       const result = await service.validateUser('admin@example.com', 'admin123');
 
       expect(result).toEqual(mockUser);
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: 'admin@example.com' },
+        where: { email: 'admin@example.com', deletedAt: null },
       });
       expect(bcrypt.compare).toHaveBeenCalledWith('admin123', mockUser.password);
     });
@@ -106,6 +108,29 @@ describe('AuthService', () => {
       (bcrypt.compare as jest.Mock).mockResolvedValue(false);
 
       const result = await service.validateUser('admin@example.com', 'wrong-password');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when user is not ACTIVE', async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        status: 'SUSPENDED',
+      } as any);
+
+      const result = await service.validateUser('admin@example.com', 'any');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when user is DELETED (although findFirst should filter it)', async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        status: 'DELETED',
+        deletedAt: new Date(),
+      } as any);
+
+      const result = await service.validateUser('admin@example.com', 'any');
 
       expect(result).toBeNull();
     });

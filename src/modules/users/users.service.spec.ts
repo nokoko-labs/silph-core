@@ -31,9 +31,11 @@ describe('UsersService', () => {
     email: 'test@example.com',
     password: 'hashed-password',
     role: Role.USER,
+    status: 'ACTIVE',
     tenantId: 'tenant-id',
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null,
   };
 
   const mockPrisma = mockDeep<PrismaService>();
@@ -91,13 +93,13 @@ describe('UsersService', () => {
       expect(prisma.user.findMany).toHaveBeenCalled();
     });
 
-    it('should filter by tenantId', async () => {
+    it('should filter by tenantId and exclude deleted users', async () => {
       mockPrisma.user.findMany.mockResolvedValue([mockUser]);
 
       await service.findAll('tenant-id');
 
       expect(prisma.user.findMany).toHaveBeenCalledWith({
-        where: { tenantId: 'tenant-id' },
+        where: { tenantId: 'tenant-id', deletedAt: null },
         orderBy: { createdAt: 'desc' },
       });
     });
@@ -141,17 +143,28 @@ describe('UsersService', () => {
   });
 
   describe('remove', () => {
-    it('should delete a user', async () => {
-      mockPrisma.user.delete.mockResolvedValue(mockUser);
+    it('should soft delete a user', async () => {
+      mockPrisma.user.update.mockResolvedValue({
+        ...mockUser,
+        status: 'DELETED',
+        deletedAt: new Date(),
+      });
 
       const result = await service.remove('user-id');
 
-      expect(result).toEqual(mockUser);
-      expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'user-id' } });
+      expect(result.status).toBe('DELETED');
+      expect(result.deletedAt).toBeDefined();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-id', deletedAt: null },
+        data: {
+          status: 'DELETED',
+          deletedAt: expect.any(Date),
+        },
+      });
     });
 
-    it('should throw NotFoundException when user does not exist', async () => {
-      mockPrisma.user.delete.mockRejectedValue(createPrismaP2025Error());
+    it('should throw NotFoundException when user does not exist or is already deleted', async () => {
+      mockPrisma.user.update.mockRejectedValue(createPrismaP2025Error());
 
       await expect(service.remove('user-id')).rejects.toThrow(NotFoundException);
     });

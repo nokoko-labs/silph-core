@@ -25,9 +25,9 @@ export class AuthService {
 
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.prisma.user.findFirst({
-      where: { email },
+      where: { email, deletedAt: null },
     });
-    if (!user || !user.password) {
+    if (!user || !user.password || user.status !== 'ACTIVE') {
       return null;
     }
     const isMatch = await bcrypt.compare(password, user.password);
@@ -68,7 +68,7 @@ export class AuthService {
 
     // 2. No account found. Check if a user with this email already exists
     const existingUser = await this.prisma.user.findFirst({
-      where: { email },
+      where: { email, deletedAt: null },
     });
 
     if (existingUser) {
