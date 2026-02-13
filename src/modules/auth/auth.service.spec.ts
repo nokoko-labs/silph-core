@@ -49,7 +49,7 @@ describe('AuthService', () => {
 
   beforeEach(async () => {
     (bcrypt.compare as jest.Mock).mockClear().mockResolvedValue(true);
-    mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+    mockPrisma.user.findFirst.mockResolvedValue(mockUser);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,14 +75,14 @@ describe('AuthService', () => {
       const result = await service.validateUser('admin@example.com', 'admin123');
 
       expect(result).toEqual(mockUser);
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { email: 'admin@example.com' },
       });
       expect(bcrypt.compare).toHaveBeenCalledWith('admin123', mockUser.password);
     });
 
     it('should return null when user not found', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
 
       const result = await service.validateUser('unknown@example.com', 'pass');
 
@@ -91,7 +91,7 @@ describe('AuthService', () => {
     });
 
     it('should return null when user has no password (OAuth-only)', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         ...mockUser,
         password: null,
       } as User);

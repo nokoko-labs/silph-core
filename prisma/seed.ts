@@ -91,7 +91,12 @@ async function main(): Promise<void> {
   const hashedPassword = bcrypt.hashSync(userParsed.data.password, 10);
   console.log('Creating User (admin)...');
   const user = await prisma.user.upsert({
-    where: { email: userParsed.data.email },
+    where: {
+      email_tenantId: {
+        email: userParsed.data.email,
+        tenantId: userParsed.data.tenantId,
+      },
+    },
     create: {
       email: userParsed.data.email,
       password: hashedPassword,

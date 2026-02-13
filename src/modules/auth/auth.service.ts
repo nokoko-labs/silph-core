@@ -24,7 +24,7 @@ export class AuthService {
   ) {}
 
   async validateUser(email: string, password: string): Promise<User | null> {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { email },
     });
     if (!user || !user.password) {
@@ -67,7 +67,7 @@ export class AuthService {
     }
 
     // 2. No account found. Check if a user with this email already exists
-    const existingUser = await this.prisma.user.findUnique({
+    const existingUser = await this.prisma.user.findFirst({
       where: { email },
     });
 
