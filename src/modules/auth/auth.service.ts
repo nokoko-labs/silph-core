@@ -28,7 +28,12 @@ export class AuthService {
       where: { email, deletedAt: null },
       include: { tenant: true },
     });
-    if (!user || !user.password || user.status !== 'ACTIVE' || user.tenant.deletedAt) {
+    if (
+      !user ||
+      !user.password ||
+      !['ACTIVE', 'PENDING'].includes(user.status) ||
+      user.tenant.deletedAt
+    ) {
       return null;
     }
     const isMatch = await bcrypt.compare(password, user.password);
@@ -64,6 +69,9 @@ export class AuthService {
     });
 
     if (existingAccount) {
+      if (!['ACTIVE', 'PENDING'].includes(existingAccount.user.status)) {
+        throw new UnauthorizedException('User account is not active');
+      }
       return existingAccount.user;
     }
 
@@ -73,6 +81,10 @@ export class AuthService {
     });
 
     if (existingUser) {
+      if (!['ACTIVE', 'PENDING'].includes(existingUser.status)) {
+        throw new UnauthorizedException('User account is not active');
+      }
+
       // Link existing user to Google account
       await this.prisma.account.create({
         data: {

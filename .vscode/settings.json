@@ -1,0 +1,8 @@
+{
+  "containers.commands.composeDownSubset": [
+    {
+      "label": "Compose Down",
+      "template": "${composeCommand} ${profileList} ${configurationFile} down ${serviceList}"
+    }
+  ]
+}

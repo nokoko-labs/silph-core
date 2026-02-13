@@ -1,3 +1,4 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -117,7 +118,18 @@ describe('AuthService', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null when user is not ACTIVE', async () => {
+    it('should return user when email and password are valid and user is PENDING', async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        status: 'PENDING',
+      } as any);
+
+      const result = await service.validateUser('admin@example.com', 'admin123');
+
+      expect(result).toEqual({ ...mockUser, status: 'PENDING' });
+    });
+
+    it('should return null when user is not ACTIVE or PENDING', async () => {
       prisma.user.findFirst.mockResolvedValue({
         ...mockUser,
         status: 'SUSPENDED',
@@ -152,6 +164,56 @@ describe('AuthService', () => {
       const result = await service.validateUser('admin@example.com', 'any');
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('findOrCreateFromGoogle', () => {
+    const profile = {
+      id: 'google-id',
+      emails: [{ value: 'test@example.com' }],
+      displayName: 'Test User',
+    };
+
+    it('should return user if account already exists and is ACTIVE', async () => {
+      mockPrisma.account.findUnique.mockResolvedValue({
+        user: { ...mockUser, status: 'ACTIVE' },
+      } as any);
+
+      const result = await service.findOrCreateFromGoogle(profile);
+      expect(result.status).toBe('ACTIVE');
+    });
+
+    it('should return user if account already exists and is PENDING', async () => {
+      mockPrisma.account.findUnique.mockResolvedValue({
+        user: { ...mockUser, status: 'PENDING' },
+      } as any);
+
+      const result = await service.findOrCreateFromGoogle(profile);
+      expect(result.status).toBe('PENDING');
+    });
+
+    it('should throw UnauthorizedException if account already exists but is SUSPENDED', async () => {
+      mockPrisma.account.findUnique.mockResolvedValue({
+        user: { ...mockUser, status: 'SUSPENDED' },
+      } as any);
+
+      await expect(service.findOrCreateFromGoogle(profile)).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should return existing user if email matches and user is ACTIVE', async () => {
+      mockPrisma.account.findUnique.mockResolvedValue(null);
+      mockPrisma.user.findFirst.mockResolvedValue({ ...mockUser, status: 'ACTIVE' } as any);
+      mockPrisma.account.create.mockResolvedValue({} as any);
+
+      const result = await service.findOrCreateFromGoogle(profile);
+      expect(result.status).toBe('ACTIVE');
+    });
+
+    it('should throw UnauthorizedException if existing user matches but is SUSPENDED', async () => {
+      mockPrisma.account.findUnique.mockResolvedValue(null);
+      mockPrisma.user.findFirst.mockResolvedValue({ ...mockUser, status: 'SUSPENDED' } as any);
+
+      await expect(service.findOrCreateFromGoogle(profile)).rejects.toThrow(UnauthorizedException);
     });
   });
 
