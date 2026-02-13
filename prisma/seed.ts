@@ -1,121 +1,191 @@
-import { type Prisma, PrismaClient } from '@prisma/client';
+import { faker } from '@faker-js/faker';
+import { PrismaClient, Role, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { z } from 'zod';
 
-/**
- * Zod schemas for seed data validation.
- * Aligned with prisma/schema.prisma (Tenant and User models).
- */
+const prisma = new PrismaClient();
 
-const TenantSeedSchema = z.object({
-  name: z.string().min(1, 'Tenant name is required'),
-  slug: z.string().min(1, 'Tenant slug is required'),
-  isActive: z.boolean().default(true),
-  config: z.record(z.unknown()).optional().nullable(),
-});
+async function main() {
+  console.log('--- 🚀 Starting Seed 80s Edition ---');
 
-const UserSeedSchema = z.object({
-  email: z.string().email('Valid email is required'),
-  password: z.string().min(1, 'Password is required'),
-  role: z.enum(['ADMIN', 'USER']).default('ADMIN'),
-  tenantId: z.string().uuid(),
-});
+  const password = await bcrypt.hash('password123', 10);
 
-type TenantSeed = z.infer<typeof TenantSeedSchema>;
-type UserSeed = z.infer<typeof UserSeedSchema>;
-
-const INITIAL_TENANT_SLUG = 'default';
-const ADMIN_USER_EMAIL = 'admin@example.com';
-
-async function main(): Promise<void> {
-  const prisma = new PrismaClient();
-
-  const tenantPayload: TenantSeed = {
-    name: 'Default Tenant',
-    slug: INITIAL_TENANT_SLUG,
-    isActive: true,
-  };
-
-  const tenantParsed = TenantSeedSchema.safeParse(tenantPayload);
-  if (!tenantParsed.success) {
-    console.error('Tenant seed validation failed:', tenantParsed.error.flatten());
-    throw new Error('Invalid tenant seed data');
-  }
-
-  console.log('Creating Tenant...');
-  const configJson: Prisma.InputJsonValue | undefined =
-    tenantParsed.data.config != null
-      ? (tenantParsed.data.config as Prisma.InputJsonValue)
-      : undefined;
-
-  const tenant = await prisma.tenant.upsert({
-    where: { slug: tenantParsed.data.slug },
+  // --- 1. Mushroom Kingdom Tenant ---
+  console.log('🍄 Creating Mushroom Kingdom...');
+  const mushroomKingdom = await prisma.tenant.upsert({
+    where: { slug: 'mushroom-kingdom' },
+    update: {},
     create: {
-      name: tenantParsed.data.name,
-      slug: tenantParsed.data.slug,
-      isActive: tenantParsed.data.isActive,
-      config: configJson,
-    },
-    update: {
-      name: tenantParsed.data.name,
-      isActive: tenantParsed.data.isActive,
-      config: configJson,
+      name: 'Mushroom Kingdom',
+      slug: 'mushroom-kingdom',
+      isActive: true,
+      config: { color: 'red', icon: 'mushroom' },
     },
   });
-  console.log('Tenant created/updated:', tenant.id, tenant.slug);
 
-  const adminPassword =
-    process.env.NODE_ENV === 'production'
-      ? (() => {
-          const p = process.env.ADMIN_SEED_PASSWORD;
-          if (p == null || p === '') {
-            throw new Error('ADMIN_SEED_PASSWORD is required in production');
-          }
-          return p;
-        })()
-      : (process.env.ADMIN_SEED_PASSWORD ?? 'admin123');
+  const mushroomUsers = [
+    { email: 'mario@mushroom.com', role: Role.ADMIN, status: UserStatus.ACTIVE, name: 'Mario' },
+    { email: 'luigi@mushroom.com', role: Role.USER, status: UserStatus.PENDING, name: 'Luigi' },
+    {
+      email: 'peach@mushroom.com',
+      role: Role.USER,
+      status: UserStatus.ACTIVE,
+      name: 'Princess Peach',
+    },
+    { email: 'bowser@mushroom.com', role: Role.USER, status: UserStatus.SUSPENDED, name: 'Bowser' },
+    {
+      email: 'toad@mushroom.com',
+      role: Role.USER,
+      status: UserStatus.DELETED,
+      name: 'Toad',
+      deletedAt: faker.date.past({ years: 1 }),
+    },
+  ];
 
-  const userPayload: UserSeed = {
-    email: ADMIN_USER_EMAIL,
-    password: adminPassword,
-    role: 'ADMIN',
-    tenantId: tenant.id,
-  };
-
-  const userParsed = UserSeedSchema.safeParse(userPayload);
-  if (!userParsed.success) {
-    console.error('User seed validation failed:', userParsed.error.flatten());
-    throw new Error('Invalid user seed data');
-  }
-
-  const hashedPassword = bcrypt.hashSync(userParsed.data.password, 10);
-  console.log('Creating User (admin)...');
-  const user = await prisma.user.upsert({
-    where: {
-      email_tenantId: {
-        email: userParsed.data.email,
-        tenantId: userParsed.data.tenantId,
+  for (const u of mushroomUsers) {
+    await prisma.user.upsert({
+      where: { email_tenantId: { email: u.email, tenantId: mushroomKingdom.id } },
+      update: {},
+      create: {
+        email: u.email,
+        password,
+        role: u.role,
+        status: u.status,
+        tenantId: mushroomKingdom.id,
+        deletedAt: u.deletedAt || null,
       },
-    },
+    });
+    console.log(`   👤 User created: ${u.name} (${u.email}) - ${u.status}`);
+  }
+
+  // --- 2. Castle Grayskull Tenant ---
+  console.log('⚔️ Creating Castle Grayskull...');
+  const grayskull = await prisma.tenant.upsert({
+    where: { slug: 'castle-grayskull' },
+    update: {},
     create: {
-      email: userParsed.data.email,
-      password: hashedPassword,
-      role: userParsed.data.role,
-      tenantId: userParsed.data.tenantId,
-    },
-    update: {
-      password: hashedPassword,
-      role: userParsed.data.role,
-      tenantId: userParsed.data.tenantId,
+      name: 'Castle Grayskull',
+      slug: 'castle-grayskull',
+      isActive: true,
+      config: { color: 'green', icon: 'skull' },
     },
   });
-  console.log('User created/updated:', user.id, user.email);
 
-  await prisma.$disconnect();
-  console.log('Seed completed successfully.');
+  const grayskullUsers = [
+    { email: 'heman@eternia.com', role: Role.ADMIN, status: UserStatus.ACTIVE, name: 'He-Man' },
+    { email: 'shera@eternia.com', role: Role.USER, status: UserStatus.ACTIVE, name: 'She-Ra' },
+    {
+      email: 'skeletor@eternia.com',
+      role: Role.USER,
+      status: UserStatus.SUSPENDED,
+      name: 'Skeletor',
+    },
+    {
+      email: 'manatarms@eternia.com',
+      role: Role.USER,
+      status: UserStatus.PENDING,
+      name: 'Man-At-Arms',
+    },
+    {
+      email: 'orko@eternia.com',
+      role: Role.USER,
+      status: UserStatus.DELETED,
+      name: 'Orko',
+      deletedAt: faker.date.past({ years: 2 }),
+    },
+  ];
+
+  for (const u of grayskullUsers) {
+    await prisma.user.upsert({
+      where: { email_tenantId: { email: u.email, tenantId: grayskull.id } },
+      update: {},
+      create: {
+        email: u.email,
+        password,
+        role: u.role,
+        status: u.status,
+        tenantId: grayskull.id,
+        deletedAt: u.deletedAt || null,
+      },
+    });
+    console.log(`   👤 User created: ${u.name} (${u.email}) - ${u.status}`);
+  }
+
+  // --- 3. Hill Valley (Soft Deleted) ---
+  console.log('🚗 Creating Hill Valley (Soft Deleted)...');
+  const hillValley = await prisma.tenant.upsert({
+    where: { slug: 'hill-valley' },
+    update: {
+      deletedAt: new Date('1985-10-26T01:21:00Z'),
+      isActive: false,
+    },
+    create: {
+      name: 'Hill Valley',
+      slug: 'hill-valley',
+      isActive: false,
+      deletedAt: new Date('1985-10-26T01:21:00Z'),
+      config: { color: 'blue', icon: 'delorean' },
+    },
+  });
+
+  const hillValleyUsers = [
+    {
+      email: 'marty@hillvalley.com',
+      role: Role.ADMIN,
+      status: UserStatus.SUSPENDED,
+      name: 'Marty McFly',
+    },
+    {
+      email: 'doc@hillvalley.com',
+      role: Role.USER,
+      status: UserStatus.SUSPENDED,
+      name: 'Emmet Brown',
+    },
+    {
+      email: 'biff@hillvalley.com',
+      role: Role.USER,
+      status: UserStatus.SUSPENDED,
+      name: 'Biff Tannen',
+    },
+    {
+      email: 'lorraine@hillvalley.com',
+      role: Role.USER,
+      status: UserStatus.DELETED,
+      name: 'Lorraine Baines',
+      deletedAt: faker.date.past(),
+    },
+    {
+      email: 'george@hillvalley.com',
+      role: Role.USER,
+      status: UserStatus.DELETED,
+      name: 'George McFly',
+      deletedAt: faker.date.past(),
+    },
+  ];
+
+  for (const u of hillValleyUsers) {
+    await prisma.user.upsert({
+      where: { email_tenantId: { email: u.email, tenantId: hillValley.id } },
+      update: {},
+      create: {
+        email: u.email,
+        password,
+        role: u.role,
+        status: u.status,
+        tenantId: hillValley.id,
+        deletedAt: u.deletedAt || null,
+      },
+    });
+    console.log(`   👤 User created: ${u.name} (${u.email}) - ${u.status}`);
+  }
+
+  console.log('--- ✅ Seed Completed Successfully ---');
 }
 
-main().catch((e) => {
-  console.error('Seed failed:', e);
-  throw new Error(`Seed failed: ${e}`);
-});
+main()
+  .catch((e) => {
+    console.error('❌ Seed failed:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
