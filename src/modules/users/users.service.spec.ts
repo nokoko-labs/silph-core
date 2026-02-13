@@ -1,0 +1,159 @@
+import { ConflictException, NotFoundException } from '@nestjs/common';
+import { Test, type TestingModule } from '@nestjs/testing';
+import { Prisma, Role } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
+import { type DeepMockProxy, mockDeep } from 'jest-mock-extended';
+import { PrismaService } from '@/database/prisma.service';
+import { UsersService } from './users.service';
+
+jest.mock('bcryptjs');
+
+function createPrismaP2002Error(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: '5.x',
+  });
+}
+
+function createPrismaP2025Error(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError('Record not found', {
+    code: 'P2025',
+    clientVersion: '5.x',
+  });
+}
+
+describe('UsersService', () => {
+  let service: UsersService;
+  let prisma: DeepMockProxy<PrismaService>;
+
+  const mockUser = {
+    id: 'user-id',
+    email: 'test@example.com',
+    password: 'hashed-password',
+    role: Role.USER,
+    tenantId: 'tenant-id',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockPrisma = mockDeep<PrismaService>();
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [UsersService, { provide: PrismaService, useValue: mockPrisma }],
+    }).compile();
+
+    service = module.get<UsersService>(UsersService);
+    prisma = module.get(PrismaService);
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('create', () => {
+    it('should create a user', async () => {
+      const dto = { email: 'test@example.com', password: 'password', tenantId: 'tenant-id' };
+      mockPrisma.user.create.mockResolvedValue(mockUser);
+
+      const result = await service.create(dto);
+
+      expect(result).toEqual(mockUser);
+      expect(bcrypt.hash).toHaveBeenCalledWith('password', 10);
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: {
+          email: dto.email,
+          password: 'hashed-password',
+          tenantId: dto.tenantId,
+          role: 'USER',
+        },
+      });
+    });
+
+    it('should throw ConflictException when email-tenant combo already exists', async () => {
+      const dto = { email: 'test@example.com', password: 'password', tenantId: 'tenant-id' };
+      mockPrisma.user.create.mockRejectedValue(createPrismaP2002Error());
+
+      await expect(service.create(dto)).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('findAll', () => {
+    it('should return all users', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([mockUser]);
+
+      const result = await service.findAll();
+
+      expect(result).toEqual([mockUser]);
+      expect(prisma.user.findMany).toHaveBeenCalled();
+    });
+
+    it('should filter by tenantId', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([mockUser]);
+
+      await service.findAll('tenant-id');
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        where: { tenantId: 'tenant-id' },
+        orderBy: { createdAt: 'desc' },
+      });
+    });
+  });
+
+  describe('findOne', () => {
+    it('should return a user by id', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.findOne('user-id');
+
+      expect(result).toEqual(mockUser);
+    });
+
+    it('should throw NotFoundException when user does not exist', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOne('non-existent')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('update', () => {
+    it('should update a user', async () => {
+      const dto = { email: 'new@example.com' };
+      mockPrisma.user.update.mockResolvedValue({ ...mockUser, email: dto.email });
+
+      const result = await service.update('user-id', dto);
+
+      expect(result.email).toBe(dto.email);
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it('should hash password if provided', async () => {
+      const dto = { password: 'new-password' };
+      mockPrisma.user.update.mockResolvedValue(mockUser);
+
+      await service.update('user-id', dto);
+
+      expect(bcrypt.hash).toHaveBeenCalledWith('new-password', 10);
+    });
+  });
+
+  describe('remove', () => {
+    it('should delete a user', async () => {
+      mockPrisma.user.delete.mockResolvedValue(mockUser);
+
+      const result = await service.remove('user-id');
+
+      expect(result).toEqual(mockUser);
+      expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'user-id' } });
+    });
+
+    it('should throw NotFoundException when user does not exist', async () => {
+      mockPrisma.user.delete.mockRejectedValue(createPrismaP2025Error());
+
+      await expect(service.remove('user-id')).rejects.toThrow(NotFoundException);
+    });
+  });
+});

@@ -8,6 +8,7 @@ import { HealthModule } from '@/health/health.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { PaymentsModule } from '@/modules/payments/payments.module';
 import { TenantsModule } from '@/modules/tenants/tenants.module';
+import { UsersModule } from '@/modules/users/users.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -41,6 +42,7 @@ import { AppService } from './app.service';
     AuthModule,
     PaymentsModule,
     TenantsModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

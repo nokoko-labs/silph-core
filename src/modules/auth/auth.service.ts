@@ -38,7 +38,7 @@ export class AuthService {
   }
 
   /**
-   * Find user by Google ID or email, or create a new user for OAuth sign-in.
+   * Find user by Google account, link to existing user by email, or create a new user and account.
    * New users are assigned to the default tenant (OAUTH_DEFAULT_TENANT_ID).
    */
   async findOrCreateFromGoogle(profile: {
@@ -50,23 +50,40 @@ export class AuthService {
     if (!email) {
       throw new Error('Google profile has no email');
     }
-    const existingByGoogleId = await this.prisma.user.findUnique({
-      where: { googleId: profile.id },
+
+    // 1. Check if we already have an account for this Google profile
+    const existingAccount = await this.prisma.account.findUnique({
+      where: {
+        provider_providerAccountId: {
+          provider: 'google',
+          providerAccountId: profile.id,
+        },
+      },
+      include: { user: true },
     });
-    if (existingByGoogleId) {
-      return existingByGoogleId;
+
+    if (existingAccount) {
+      return existingAccount.user;
     }
-    const existingByEmail = await this.prisma.user.findUnique({
+
+    // 2. No account found. Check if a user with this email already exists
+    const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
-    if (existingByEmail) {
-      // Link existing account to Google (allow password users to also use Google)
-      await this.prisma.user.update({
-        where: { id: existingByEmail.id },
-        data: { googleId: profile.id },
+
+    if (existingUser) {
+      // Link existing user to Google account
+      await this.prisma.account.create({
+        data: {
+          userId: existingUser.id,
+          provider: 'google',
+          providerAccountId: profile.id,
+        },
       });
-      return this.prisma.user.findUniqueOrThrow({ where: { id: existingByEmail.id } });
+      return existingUser;
     }
+
+    // 3. New user and new account
     const defaultTenantId = this.configService.getOrThrow<string>('OAUTH_DEFAULT_TENANT_ID');
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: defaultTenantId },
@@ -74,15 +91,23 @@ export class AuthService {
     if (!tenant) {
       throw new Error(`OAUTH_DEFAULT_TENANT_ID (${defaultTenantId}) does not exist`);
     }
-    return this.prisma.user.create({
+
+    const newUser = await this.prisma.user.create({
       data: {
         email,
-        googleId: profile.id,
         password: null,
         role: 'USER',
         tenantId: defaultTenantId,
+        accounts: {
+          create: {
+            provider: 'google',
+            providerAccountId: profile.id,
+          },
+        },
       },
     });
+
+    return newUser;
   }
 
   login(user: User): { access_token: string } {

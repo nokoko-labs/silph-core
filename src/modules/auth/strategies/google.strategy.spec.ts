@@ -13,7 +13,6 @@ describe('GoogleStrategy', () => {
     id: 'user-1',
     email: 'user@gmail.com',
     password: null as string | null,
-    googleId: 'google-sub-123',
     role: 'USER' as Role,
     tenantId: 'tenant-1',
     createdAt: new Date(),
