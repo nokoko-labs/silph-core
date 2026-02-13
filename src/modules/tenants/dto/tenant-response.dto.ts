@@ -10,9 +10,9 @@ export const TenantResponseSchema = z.object({
   name: z.string().describe('Display name'),
   slug: z.string().describe('URL-friendly identifier'),
   isActive: z.boolean().default(true).describe('Whether the tenant is active'),
-  config: z.record(z.unknown()).nullable().optional().describe('Optional tenant configuration'),
-  createdAt: z.string().datetime().describe('Creation timestamp (ISO 8601)'),
-  updatedAt: z.string().datetime().describe('Last update timestamp (ISO 8601)'),
+  config: z.any().nullable().optional().describe('Optional tenant configuration'),
+  createdAt: z.date().describe('Creation timestamp'),
+  updatedAt: z.date().describe('Last update timestamp'),
 });
 
 export type TenantResponsePayload = z.infer<typeof TenantResponseSchema>;
