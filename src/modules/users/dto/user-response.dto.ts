@@ -2,21 +2,21 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 
 export class UserResponseDto {
-  @ApiProperty()
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'User UUID' })
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'user@example.com', description: 'User email address' })
   email: string;
 
-  @ApiProperty({ enum: Role })
+  @ApiProperty({ enum: Role, description: 'User role' })
   role: Role;
 
-  @ApiProperty()
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'Tenant UUID' })
   tenantId: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Creation timestamp' })
   createdAt: Date;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Last update timestamp' })
   updatedAt: Date;
 }

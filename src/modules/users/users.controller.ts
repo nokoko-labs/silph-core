@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -19,6 +19,7 @@ export class UsersController {
 
   @Get()
   @ApiOperation({ summary: 'Get all users' })
+  @ApiQuery({ name: 'tenantId', required: false, description: 'Filter users by tenant ID' })
   @ApiResponse({ status: 200, type: [UserResponseDto] })
   async findAll(@Query('tenantId') tenantId?: string): Promise<UserResponseDto[]> {
     return this.usersService.findAll(tenantId);
@@ -26,6 +27,7 @@ export class UsersController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a user by ID' })
+  @ApiParam({ name: 'id', description: 'User ID' })
   @ApiResponse({ status: 200, type: UserResponseDto })
   async findOne(@Param('id') id: string): Promise<UserResponseDto> {
     return this.usersService.findOne(id);
@@ -33,6 +35,7 @@ export class UsersController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a user' })
+  @ApiParam({ name: 'id', description: 'User ID' })
   @ApiResponse({ status: 200, type: UserResponseDto })
   async update(
     @Param('id') id: string,
@@ -43,6 +46,7 @@ export class UsersController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a user' })
+  @ApiParam({ name: 'id', description: 'User ID' })
   @ApiResponse({ status: 200, type: UserResponseDto })
   async remove(@Param('id') id: string): Promise<UserResponseDto> {
     return this.usersService.remove(id);
