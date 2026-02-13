@@ -26,8 +26,9 @@ export class AuthService {
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.prisma.user.findFirst({
       where: { email, deletedAt: null },
+      include: { tenant: true },
     });
-    if (!user || !user.password || user.status !== 'ACTIVE') {
+    if (!user || !user.password || user.status !== 'ACTIVE' || user.tenant.deletedAt) {
       return null;
     }
     const isMatch = await bcrypt.compare(password, user.password);
@@ -86,10 +87,10 @@ export class AuthService {
     // 3. New user and new account
     const defaultTenantId = this.configService.getOrThrow<string>('OAUTH_DEFAULT_TENANT_ID');
     const tenant = await this.prisma.tenant.findUnique({
-      where: { id: defaultTenantId },
+      where: { id: defaultTenantId, deletedAt: null },
     });
     if (!tenant) {
-      throw new Error(`OAUTH_DEFAULT_TENANT_ID (${defaultTenantId}) does not exist`);
+      throw new Error(`OAUTH_DEFAULT_TENANT_ID (${defaultTenantId}) does not exist or is deleted`);
     }
 
     const newUser = await this.prisma.user.create({

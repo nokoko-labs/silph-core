@@ -26,7 +26,11 @@ describe('AuthService', () => {
     tenantId: 'tenant-uuid-1',
     createdAt: new Date(),
     updatedAt: new Date(),
-    deletedAt: null,
+    deletedAt: null as Date | null,
+    tenant: {
+      id: 'tenant-uuid-1',
+      deletedAt: null as Date | null,
+    },
   };
 
   const mockPrisma = mockDeep<PrismaService>();
@@ -73,12 +77,13 @@ describe('AuthService', () => {
   });
 
   describe('validateUser', () => {
-    it('should return user when email and password are valid and user is ACTIVE', async () => {
+    it('should return user when email and password are valid and user is ACTIVE and tenant is not deleted', async () => {
       const result = await service.validateUser('admin@example.com', 'admin123');
 
       expect(result).toEqual(mockUser);
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { email: 'admin@example.com', deletedAt: null },
+        include: { tenant: true },
       });
       expect(bcrypt.compare).toHaveBeenCalledWith('admin123', mockUser.password);
     });
@@ -128,6 +133,20 @@ describe('AuthService', () => {
         ...mockUser,
         status: 'DELETED',
         deletedAt: new Date(),
+      } as any);
+
+      const result = await service.validateUser('admin@example.com', 'any');
+
+      expect(result).toBeNull();
+    });
+
+    it('should return null when user tenant is DELETED', async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        tenant: {
+          ...mockUser.tenant,
+          deletedAt: new Date(),
+        },
       } as any);
 
       const result = await service.validateUser('admin@example.com', 'any');

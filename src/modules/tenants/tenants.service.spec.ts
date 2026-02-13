@@ -24,6 +24,7 @@ describe('TenantsService', () => {
     config: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+    deletedAt: null as Date | null,
   };
 
   const mockPrisma = mockDeep<PrismaService>();
@@ -69,11 +70,12 @@ describe('TenantsService', () => {
   });
 
   describe('findAll', () => {
-    it('should return all tenants', async () => {
+    it('should return all non-deleted tenants', async () => {
       const result = await service.findAll();
 
       expect(result).toEqual([mockTenant]);
       expect(prisma.tenant.findMany).toHaveBeenCalledWith({
+        where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },
       });
     });
@@ -85,7 +87,7 @@ describe('TenantsService', () => {
 
       expect(result).toEqual(mockTenant);
       expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
-        where: { id: mockTenant.id },
+        where: { id: mockTenant.id, deletedAt: null },
       });
     });
 
@@ -105,7 +107,7 @@ describe('TenantsService', () => {
 
       expect(result).toEqual(mockTenant);
       expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
-        where: { slug: mockTenant.slug },
+        where: { slug: mockTenant.slug, deletedAt: null },
       });
     });
 
@@ -143,14 +145,33 @@ describe('TenantsService', () => {
   });
 
   describe('remove', () => {
-    it('should remove a tenant', async () => {
-      mockPrisma.tenant.delete.mockResolvedValue(mockTenant);
+    it('should soft delete a tenant and its users when no active users exist', async () => {
+      mockPrisma.user.count.mockResolvedValue(0);
+      mockPrisma.tenant.update.mockResolvedValue({ ...mockTenant, deletedAt: new Date() });
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
 
       await service.remove(mockTenant.id);
 
-      expect(prisma.tenant.delete).toHaveBeenCalledWith({
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
         where: { id: mockTenant.id },
+        data: { deletedAt: expect.any(Date) },
       });
+      expect(prisma.user.updateMany).toHaveBeenCalledWith({
+        where: { tenantId: mockTenant.id, deletedAt: null },
+        data: {
+          status: 'DELETED',
+          deletedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('should throw PreconditionFailedException if active users exist', async () => {
+      mockPrisma.user.count.mockResolvedValue(2);
+
+      await expect(service.remove(mockTenant.id)).rejects.toThrow(
+        import('@nestjs/common').PreconditionFailedException,
+      );
     });
   });
 });

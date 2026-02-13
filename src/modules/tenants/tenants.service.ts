@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  PreconditionFailedException,
+} from '@nestjs/common';
 import { Prisma, Tenant } from '@prisma/client';
 import { PrismaService } from '@/database/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
@@ -25,13 +30,14 @@ export class TenantsService {
 
   async findAll(): Promise<Tenant[]> {
     return this.prisma.tenant.findMany({
+      where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async findOne(id: string): Promise<Tenant> {
     const tenant = await this.prisma.tenant.findUnique({
-      where: { id },
+      where: { id, deletedAt: null },
     });
     if (!tenant) {
       throw new NotFoundException(`Tenant with id "${id}" not found`);
@@ -41,7 +47,7 @@ export class TenantsService {
 
   async findBySlug(slug: string): Promise<Tenant> {
     const tenant = await this.prisma.tenant.findUnique({
-      where: { slug },
+      where: { slug, deletedAt: null },
     });
     if (!tenant) {
       throw new NotFoundException(`Tenant with slug "${slug}" not found`);
@@ -65,9 +71,41 @@ export class TenantsService {
   }
 
   async remove(id: string): Promise<void> {
-    await this.findOne(id); // Ensure tenant exists
-    await this.prisma.tenant.delete({
-      where: { id },
+    const tenant = await this.findOne(id); // Ensure tenant exists and is not deleted
+
+    // Check for active users
+    const activeUsersCount = await this.prisma.user.count({
+      where: {
+        tenantId: id,
+        status: 'ACTIVE',
+        deletedAt: null,
+      },
+    });
+
+    if (activeUsersCount > 0) {
+      throw new PreconditionFailedException(
+        `Cannot delete tenant "${tenant.name}" because it has ${activeUsersCount} active users`,
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Soft delete tenant
+      await tx.tenant.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+
+      // 2. Soft delete all non-deleted users in this tenant
+      await tx.user.updateMany({
+        where: {
+          tenantId: id,
+          deletedAt: null,
+        },
+        data: {
+          status: 'DELETED',
+          deletedAt: new Date(),
+        },
+      });
     });
   }
 }
