@@ -299,4 +299,104 @@ describe('AuthService', () => {
       await expect(service.exchangeOAuthCode('invalid-code')).rejects.toThrow();
     });
   });
+
+  describe('switchTenant', () => {
+    it('should switch tenant and return a new token when valid', async () => {
+      // 1. Current user email
+      prisma.user.findUnique.mockResolvedValue({ email: 'admin@example.com' } as User);
+
+      // 2. Target user in target tenant
+      const targetUser = {
+        ...mockUser,
+        tenantId: 'tenant-uuid-2',
+        role: 'USER',
+        tenant: {
+          id: 'tenant-uuid-2',
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+      };
+      prisma.user.findFirst.mockResolvedValue(targetUser as unknown as User);
+
+      const result = await service.switchTenant('user-uuid-1', 'tenant-uuid-2');
+
+      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'user-uuid-1' },
+        select: { email: true },
+      });
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: {
+          email: 'admin@example.com',
+          tenantId: 'tenant-uuid-2',
+          deletedAt: null,
+        },
+        include: { tenant: true },
+      });
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sub: targetUser.id,
+          tenantId: 'tenant-uuid-2',
+          role: 'USER',
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('should throw UnauthorizedException if current user not found', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.switchTenant('non-existent', 'tenant-2')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException if target user does not exist in target tenant', async () => {
+      prisma.user.findUnique.mockResolvedValue({ email: 'admin@example.com' } as User);
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(service.switchTenant('user-1', 'tenant-2')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException if target user is SUSPENDED', async () => {
+      prisma.user.findUnique.mockResolvedValue({ email: 'admin@example.com' } as User);
+      prisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        status: 'SUSPENDED',
+        tenant: { status: 'ACTIVE', deletedAt: null },
+      } as unknown as User);
+
+      await expect(service.switchTenant('user-1', 'tenant-2')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException if target tenant is not ACTIVE', async () => {
+      prisma.user.findUnique.mockResolvedValue({ email: 'admin@example.com' } as User);
+      prisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        status: 'ACTIVE',
+        tenant: { status: 'PAUSED', deletedAt: null },
+      } as unknown as User);
+
+      await expect(service.switchTenant('user-1', 'tenant-2')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException if target tenant is DELETED', async () => {
+      prisma.user.findUnique.mockResolvedValue({ email: 'admin@example.com' } as User);
+      prisma.user.findFirst.mockResolvedValue({
+        ...mockUser,
+        status: 'ACTIVE',
+        tenant: { status: 'DELETED', deletedAt: new Date() },
+      } as unknown as User);
+
+      await expect(service.switchTenant('user-1', 'tenant-2')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+  });
 });

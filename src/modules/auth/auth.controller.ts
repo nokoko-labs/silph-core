@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   HttpCode,
+  Param,
   Post,
   Request,
   Res,
@@ -99,5 +100,20 @@ export class AuthController {
   @ApiResponse({ status: 500, description: 'Internal server error' })
   getProfile(@CurrentUser() user: JwtPayload): JwtPayload {
     return user;
+  }
+
+  @Post('switch-tenant/:tenantId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('BearerAuth')
+  @ApiOperation({ summary: 'Switch current tenant context' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns new JWT for the target tenant',
+    type: LoginResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized or access to target tenant denied' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async switchTenant(@CurrentUser() user: JwtPayload, @Param('tenantId') tenantId: string) {
+    return this.authService.switchTenant(user.sub, tenantId);
   }
 }

@@ -220,4 +220,44 @@ export class AuthService {
 
     return { access_token };
   }
+
+  /**
+   * Switches the current tenant context for a user.
+   * Validates that the user (by email) exists in the target tenant and is ACTIVE/PENDING.
+   * Also validates that the target tenant is ACTIVE and not deleted.
+   */
+  async switchTenant(userId: string, targetTenantId: string): Promise<{ access_token: string }> {
+    // 1. Get current user's email
+    const currentUser = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
+    if (!currentUser) {
+      throw new UnauthorizedException('Current user not found');
+    }
+
+    // 2. Find user record in target tenant
+    const targetUser = await this.prisma.user.findFirst({
+      where: {
+        email: currentUser.email,
+        tenantId: targetTenantId,
+        deletedAt: null,
+      },
+      include: { tenant: true },
+    });
+
+    // 3. Validation: User must exist in target tenant, not deleted, and tenant must be ACTIVE
+    if (
+      !targetUser ||
+      !['ACTIVE', 'PENDING'].includes(targetUser.status) ||
+      targetUser.tenant.deletedAt ||
+      targetUser.tenant.status !== 'ACTIVE'
+    ) {
+      throw new UnauthorizedException('Access to target tenant denied or tenant is not active');
+    }
+
+    // 4. Generate new token for the target user record
+    return this.login(targetUser);
+  }
 }
