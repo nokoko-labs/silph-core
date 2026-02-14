@@ -19,10 +19,12 @@ import { GoogleAuthGuard } from '@/common/guards/google-auth.guard';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { LocalAuthGuard } from '@/common/guards/local-auth.guard';
 import { AuthService, JwtPayload } from './auth.service';
+import { ForgotPasswordDto, forgotPasswordSchema } from './dto/forgot-password.dto';
 import { LoginDto, type LoginPayload, loginSchema } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';
 import { OauthExchangeDto, oauthExchangeSchema } from './dto/oauth-exchange.dto';
+import { ResetPasswordDto, resetPasswordSchema } from './dto/reset-password.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -115,5 +117,33 @@ export class AuthController {
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async switchTenant(@CurrentUser() user: JwtPayload, @Param('tenantId') tenantId: string) {
     return this.authService.switchTenant(user.sub, tenantId);
+  }
+
+  @Post('forgot-password')
+  @UsePipes(new ZodValidationPipe(forgotPasswordSchema))
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Request password reset email' })
+  @ApiBody({ type: ForgotPasswordDto, description: 'User email' })
+  @ApiResponse({ status: 200, description: 'Email sent message' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async forgotPassword(@Body() payload: ForgotPasswordDto) {
+    await this.authService.forgotPassword(payload.email);
+    return {
+      message: 'If an account with that email exists, a password reset link has been sent.',
+    };
+  }
+
+  @Post('reset-password')
+  @UsePipes(new ZodValidationPipe(resetPasswordSchema))
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Reset password using token' })
+  @ApiBody({ type: ResetPasswordDto, description: 'Token and new password' })
+  @ApiResponse({ status: 200, description: 'Password reset successful' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async resetPassword(@Body() payload: ResetPasswordDto) {
+    await this.authService.resetPassword(payload.token, payload.newPassword);
+    return { message: 'Password has been successfully updated.' };
   }
 }

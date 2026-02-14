@@ -8,6 +8,7 @@ import { ConfigModule } from '@/config/config.module';
 import { DatabaseModule } from '@/database/database.module';
 import { HealthModule } from '@/health/health.module';
 import { AuthModule } from '@/modules/auth/auth.module';
+import { MailModule } from '@/modules/mail/mail.module';
 import { PaymentsModule } from '@/modules/payments/payments.module';
 import { TenantsModule } from '@/modules/tenants/tenants.module';
 import { UsersModule } from '@/modules/users/users.module';
@@ -50,6 +51,7 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
     PaymentsModule,
     TenantsModule,
     UsersModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [

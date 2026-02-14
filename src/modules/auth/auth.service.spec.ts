@@ -7,10 +7,12 @@ import * as bcrypt from 'bcryptjs';
 import { type DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { RedisService } from '@/cache/redis.service';
 import { PrismaService } from '@/database/prisma.service';
+import { MailService } from '@/modules/mail/mail.service';
 import { AuthService } from './auth.service';
 
 jest.mock('bcryptjs', () => ({
   compare: jest.fn().mockResolvedValue(true),
+  hash: jest.fn().mockResolvedValue('hashed-password'),
 }));
 
 describe('AuthService', () => {
@@ -55,6 +57,10 @@ describe('AuthService', () => {
     del: jest.fn().mockResolvedValue(1),
   };
 
+  const mockMailService = {
+    sendResetPasswordEmail: jest.fn().mockResolvedValue(true),
+  };
+
   beforeEach(async () => {
     (bcrypt.compare as jest.Mock).mockClear().mockResolvedValue(true);
     mockPrisma.user.findFirst.mockResolvedValue(mockUser);
@@ -66,6 +72,7 @@ describe('AuthService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedisService, useValue: mockRedisService },
+        { provide: MailService, useValue: mockMailService },
       ],
     }).compile();
 
@@ -397,6 +404,82 @@ describe('AuthService', () => {
       await expect(service.switchTenant('user-1', 'tenant-2')).rejects.toThrow(
         UnauthorizedException,
       );
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('should generate token, hash it, save it and send email', async () => {
+      mockPrisma.passwordResetToken.create.mockResolvedValue({} as unknown as any);
+
+      await service.forgotPassword('admin@example.com');
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { email: 'admin@example.com', deletedAt: null },
+      });
+      expect(prisma.passwordResetToken.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: mockUser.id,
+            token: expect.any(String),
+            expiresAt: expect.any(Date),
+          }),
+        }),
+      );
+      expect(mockMailService.sendResetPasswordEmail).toHaveBeenCalledWith(
+        mockUser.email,
+        expect.any(String),
+      );
+    });
+
+    it('should throw NotFoundException if user not found', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(service.forgotPassword('unknown@example.com')).rejects.toThrow();
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('should reset password and delete token if valid', async () => {
+      const mockResetToken = {
+        id: 'token-uuid',
+        token: 'hashed-token',
+        userId: mockUser.id,
+        expiresAt: new Date(Date.now() + 3600000), // 1h from now
+        user: mockUser,
+      };
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValue(mockResetToken as unknown as any);
+      mockPrisma.user.update.mockResolvedValue({} as unknown as any);
+      mockPrisma.passwordResetToken.delete.mockResolvedValue({} as unknown as any);
+
+      await service.resetPassword('raw-token', 'new-password123');
+
+      expect(prisma.user.update).toHaveBeenCalled();
+      expect(prisma.passwordResetToken.delete).toHaveBeenCalledWith({
+        where: { id: 'token-uuid' },
+      });
+    });
+
+    it('should throw BadRequestException if token is invalid', async () => {
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValue(null);
+
+      await expect(service.resetPassword('invalid', 'pass')).rejects.toThrow();
+    });
+
+    it('should throw BadRequestException and delete token if expired', async () => {
+      const mockResetToken = {
+        id: 'token-uuid',
+        token: 'hashed-token',
+        userId: mockUser.id,
+        expiresAt: new Date(Date.now() - 3600000), // 1h ago
+        user: mockUser,
+      };
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValue(mockResetToken as unknown as any);
+      mockPrisma.passwordResetToken.delete.mockResolvedValue({} as unknown as any);
+
+      await expect(service.resetPassword('token', 'pass')).rejects.toThrow();
+      expect(prisma.passwordResetToken.delete).toHaveBeenCalledWith({
+        where: { id: 'token-uuid' },
+      });
     });
   });
 });
