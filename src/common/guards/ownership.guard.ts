@@ -1,5 +1,4 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
 import { JwtPayload } from '@/modules/auth/auth.service';
 
@@ -10,8 +9,6 @@ import { JwtPayload } from '@/modules/auth/auth.service';
  */
 @Injectable()
 export class OwnershipGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
-
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const user: JwtPayload = request.user;

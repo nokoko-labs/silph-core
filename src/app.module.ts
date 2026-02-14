@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { ClsModule } from 'nestjs-cls';
 import { LoggerModule } from 'nestjs-pino';
 import { RedisModule } from '@/cache/redis.module';
 import { ConfigModule } from '@/config/config.module';
@@ -11,6 +13,7 @@ import { TenantsModule } from '@/modules/tenants/tenants.module';
 import { UsersModule } from '@/modules/users/users.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
 
 @Module({
   imports: [
@@ -37,6 +40,10 @@ import { AppService } from './app.service';
       },
     }),
     DatabaseModule,
+    ClsModule.forRoot({
+      global: true,
+      middleware: { mount: true },
+    }),
     HealthModule,
     RedisModule,
     AuthModule,
@@ -45,6 +52,12 @@ import { AppService } from './app.service';
     UsersModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TenantInterceptor,
+    },
+  ],
 })
 export class AppModule {}
