@@ -60,6 +60,7 @@
     "pino-pretty": "^11.3.0",
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
+    "resend": "^6.9.2",
     "rxjs": "^7.8.2",
     "swagger-ui-express": "^5.0.1",
     "zod": "^3.25.76"
