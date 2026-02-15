@@ -39,7 +39,7 @@ export class AuthService {
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.prisma.user.findFirst({
       where: { email, deletedAt: null },
-      include: { tenant: true },
+      include: { tenant: true, accounts: true },
     });
     if (
       !user ||
@@ -58,82 +58,107 @@ export class AuthService {
   }
 
   /**
-   * Find user by Google account, link to existing user by email, or create a new user and account.
-   * New users are assigned to the default tenant (OAUTH_DEFAULT_TENANT_ID).
+   * Universal method to process social profiles (Google, GitHub, etc.)
+   * Handles linking to existing accounts by email and tenantId, or creating new ones.
    */
-  async findOrCreateFromGoogle(profile: {
-    id: string;
-    emails?: Array<{ value: string; verified?: boolean }>;
-    displayName?: string;
-  }): Promise<User> {
-    const email = profile.emails?.[0]?.value;
+  async processSocialProfile(
+    profile: {
+      id: string;
+      emails?: Array<{ value: string; verified?: boolean }>;
+      displayName?: string;
+    },
+    provider: string,
+  ): Promise<User> {
+    const emailData = profile.emails?.[0];
+    const email = emailData?.value;
+
     if (!email) {
-      throw new Error('Google profile has no email');
+      throw new BadRequestException(`${provider} profile has no email`);
     }
 
-    // 1. Check if we already have an account for this Google profile
+    if (!emailData?.verified) {
+      throw new UnauthorizedException(`${provider} email is not verified`);
+    }
+
+    // 1. Step 1: Search in Account table if a record exists with provider and providerAccountId
     const existingAccount = await this.prisma.account.findUnique({
       where: {
         provider_providerAccountId: {
-          provider: 'google',
+          provider,
           providerAccountId: profile.id,
         },
       },
-      include: { user: true },
+      include: { user: { include: { tenant: true } } },
     });
 
+    // Step 2: If it exists, return the associated User
     if (existingAccount) {
-      if (!['ACTIVE', 'PENDING'].includes(existingAccount.user.status)) {
+      const user = existingAccount.user;
+      if (!['ACTIVE', 'PENDING'].includes(user.status)) {
         throw new UnauthorizedException('User account is not active');
       }
-      return existingAccount.user;
-    }
-
-    // 2. No account found. Check if a user with this email already exists
-    const existingUser = await this.prisma.user.findFirst({
-      where: { email, deletedAt: null },
-    });
-
-    if (existingUser) {
-      if (!['ACTIVE', 'PENDING'].includes(existingUser.status)) {
-        throw new UnauthorizedException('User account is not active');
+      if (user.tenant.deletedAt || user.tenant.status !== 'ACTIVE') {
+        throw new UnauthorizedException('Tenant is not active or deleted');
       }
-
-      // Link existing user to Google account
-      await this.prisma.account.create({
-        data: {
-          userId: existingUser.id,
-          provider: 'google',
-          providerAccountId: profile.id,
-        },
-      });
-      return existingUser;
+      return user;
     }
 
-    // 3. New user and new account
+    // Step 3: If Account does not exist, search in User table by email and tenantId
     const defaultTenantId = this.configService.getOrThrow<string>('OAUTH_DEFAULT_TENANT_ID');
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: defaultTenantId, deletedAt: null },
     });
+
     if (!tenant || tenant.status !== 'ACTIVE') {
       throw new Error(
         `OAUTH_DEFAULT_TENANT_ID (${defaultTenantId}) does not exist, is deleted or is not ACTIVE`,
       );
     }
 
+    // Rule 2: Verify in Tenant model if provider is included in enabledAuthProviders
+    if (!tenant.enabledAuthProviders.includes(provider)) {
+      throw new UnauthorizedException(
+        `Authentication provider ${provider} is not enabled for this tenant`,
+      );
+    }
+
+    const existingUser = await this.prisma.user.findFirst({
+      where: { email, tenantId: defaultTenantId, deletedAt: null },
+      include: { tenant: true },
+    });
+
+    if (existingUser) {
+      // Rule 1: Link social identity to existing account if user exists
+      if (!['ACTIVE', 'PENDING'].includes(existingUser.status)) {
+        throw new UnauthorizedException('User account is not active');
+      }
+
+      await this.prisma.account.create({
+        data: {
+          userId: existingUser.id,
+          provider,
+          providerAccountId: profile.id,
+        },
+      });
+      return existingUser;
+    }
+
+    // Rule 1: Create User first (with password: null) and then its Account if user does not exist
     const newUser = await this.prisma.user.create({
       data: {
         email,
         password: null,
         role: 'USER',
         tenantId: defaultTenantId,
+        emailVerified: true,
         accounts: {
           create: {
-            provider: 'google',
+            provider,
             providerAccountId: profile.id,
           },
         },
       },
+      include: { tenant: true },
     });
 
     return newUser;

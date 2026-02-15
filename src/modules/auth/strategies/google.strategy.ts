@@ -42,6 +42,6 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     if (!clientID) {
       throw new UnauthorizedException('Google login is not configured');
     }
-    return this.authService.findOrCreateFromGoogle(profile);
+    return this.authService.processSocialProfile(profile, 'google');
   }
 }

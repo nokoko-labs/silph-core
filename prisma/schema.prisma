@@ -36,7 +36,7 @@ model Tenant {
   status    TenantStatus @default(ACTIVE)
   config       Json? // Stores API Keys specifically for this tenant
   mfaRequired  Boolean      @default(false)
-  enabledAuthProviders Json @default("[\"credentials\"]")
+  enabledAuthProviders String[] @default(["password"])
   users        User[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt

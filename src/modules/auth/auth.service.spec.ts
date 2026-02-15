@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -53,6 +53,10 @@ describe('AuthService', () => {
       if (key === 'ALLOWED_OAUTH_REDIRECT_DOMAINS') return 'example.com, localhost';
       return defaultValue;
     }),
+    getOrThrow: jest.fn().mockImplementation((key: string) => {
+      if (key === 'OAUTH_DEFAULT_TENANT_ID') return 'tenant-uuid-1';
+      throw new Error(`Config key ${key} not found`);
+    }),
   };
 
   const mockRedisService = {
@@ -96,7 +100,7 @@ describe('AuthService', () => {
       expect(result).toEqual(mockUser);
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { email: 'admin@example.com', deletedAt: null },
-        include: { tenant: true },
+        include: { tenant: true, accounts: true },
       });
       expect(bcrypt.compare).toHaveBeenCalledWith('admin123', mockUser.password);
     });
@@ -179,40 +183,75 @@ describe('AuthService', () => {
     });
   });
 
-  describe('findOrCreateFromGoogle', () => {
+  describe('processSocialProfile', () => {
     const profile = {
-      id: 'google-id',
-      emails: [{ value: 'test@example.com' }],
+      id: 'social-id',
+      emails: [{ value: 'test@example.com', verified: true }],
       displayName: 'Test User',
     };
 
+    const mockTenant = {
+      id: 'tenant-uuid-1',
+      status: 'ACTIVE',
+      enabledAuthProviders: ['google', 'github'],
+      deletedAt: null,
+    };
+
+    beforeEach(() => {
+      mockPrisma.tenant.findUnique.mockResolvedValue(mockTenant as any);
+      (mockConfigService.get as jest.Mock).mockImplementation(
+        (key: string, defaultValue?: unknown) => {
+          if (key === 'OAUTH_DEFAULT_TENANT_ID') return 'tenant-uuid-1';
+          if (key === 'JWT_EXPIRES_IN') return '7d';
+          if (key === 'ALLOWED_OAUTH_REDIRECT_DOMAINS') return 'example.com, localhost';
+          return defaultValue;
+        },
+      );
+      (mockConfigService.getOrThrow as jest.Mock).mockImplementation((key: string) => {
+        if (key === 'OAUTH_DEFAULT_TENANT_ID') return 'tenant-uuid-1';
+        throw new Error(`Config key ${key} not found`);
+      });
+    });
+
+    it('should throw BadRequestException if profile has no email', async () => {
+      await expect(service.processSocialProfile({ id: 'id' }, 'google')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should throw UnauthorizedException if email is not verified', async () => {
+      const unverifiedProfile = {
+        ...profile,
+        emails: [{ value: 'test@example.com', verified: false }],
+      };
+      await expect(service.processSocialProfile(unverifiedProfile, 'google')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
     it('should return user if account already exists and is ACTIVE', async () => {
       mockPrisma.account.findUnique.mockResolvedValue({
-        user: { ...mockUser, status: 'ACTIVE' },
+        user: { ...mockUser, status: 'ACTIVE', tenant: mockTenant },
       } as unknown as Account);
 
-      const result = await service.findOrCreateFromGoogle(profile);
+      const result = await service.processSocialProfile(profile, 'google');
       expect(result.status).toBe('ACTIVE');
+      expect(mockPrisma.account.findUnique).toHaveBeenCalled();
     });
 
-    it('should return user if account already exists and is PENDING', async () => {
-      mockPrisma.account.findUnique.mockResolvedValue({
-        user: { ...mockUser, status: 'PENDING' },
-      } as unknown as Account);
+    it('should throw UnauthorizedException if provider is not enabled for tenant', async () => {
+      mockPrisma.account.findUnique.mockResolvedValue(null);
+      mockPrisma.tenant.findUnique.mockResolvedValue({
+        ...mockTenant,
+        enabledAuthProviders: ['password'], // google not here
+      } as any);
 
-      const result = await service.findOrCreateFromGoogle(profile);
-      expect(result.status).toBe('PENDING');
+      await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
-    it('should throw UnauthorizedException if account already exists but is SUSPENDED', async () => {
-      mockPrisma.account.findUnique.mockResolvedValue({
-        user: { ...mockUser, status: 'SUSPENDED' },
-      } as unknown as Account);
-
-      await expect(service.findOrCreateFromGoogle(profile)).rejects.toThrow(UnauthorizedException);
-    });
-
-    it('should return existing user if email matches and user is ACTIVE', async () => {
+    it('should link to existing user if email matches in same tenant', async () => {
       mockPrisma.account.findUnique.mockResolvedValue(null);
       mockPrisma.user.findFirst.mockResolvedValue({
         ...mockUser,
@@ -220,18 +259,39 @@ describe('AuthService', () => {
       } as unknown as User);
       mockPrisma.account.create.mockResolvedValue({} as unknown as Account);
 
-      const result = await service.findOrCreateFromGoogle(profile);
+      const result = await service.processSocialProfile(profile, 'google');
       expect(result.status).toBe('ACTIVE');
+      expect(mockPrisma.account.create).toHaveBeenCalledWith({
+        data: {
+          userId: mockUser.id,
+          provider: 'google',
+          providerAccountId: profile.id,
+        },
+      });
     });
 
-    it('should throw UnauthorizedException if existing user matches but is SUSPENDED', async () => {
+    it('should create new user and account if none exist', async () => {
       mockPrisma.account.findUnique.mockResolvedValue(null);
-      mockPrisma.user.findFirst.mockResolvedValue({
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue({
         ...mockUser,
-        status: 'SUSPENDED',
-      } as unknown as User);
+        id: 'new-user-id',
+        email: profile.emails[0].value,
+      } as any);
 
-      await expect(service.findOrCreateFromGoogle(profile)).rejects.toThrow(UnauthorizedException);
+      const result = await service.processSocialProfile(profile, 'google');
+      expect(result.id).toBe('new-user-id');
+      expect(mockPrisma.user.create).toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException if user account is SUSPENDED', async () => {
+      mockPrisma.account.findUnique.mockResolvedValue({
+        user: { ...mockUser, status: 'SUSPENDED', tenant: mockTenant },
+      } as unknown as Account);
+
+      await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
