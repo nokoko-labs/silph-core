@@ -36,6 +36,7 @@ model Tenant {
   status    TenantStatus @default(ACTIVE)
   config       Json? // Stores API Keys specifically for this tenant
   mfaRequired  Boolean      @default(false)
+  enabledAuthProviders Json @default("[\"credentials\"]")
   users        User[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
@@ -48,7 +49,12 @@ model User {
   id            String     @id @default(uuid())
   email         String
   password      String?    // null for OAuth-only users (e.g. Google)
+  googleId      String?    @unique
+  githubId      String?    @unique
+  provider      String     @default("credentials")
+  emailVerified Boolean    @default(false)
   role          Role       @default(USER)
+
   status        UserStatus @default(ACTIVE)
   tenantId            String
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -64,6 +70,7 @@ model User {
   @@unique([email, tenantId])
   @@map("users")
 }
+
 
 model PasswordResetToken {
   id        String   @id @default(uuid())
