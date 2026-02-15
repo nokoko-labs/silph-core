@@ -49,13 +49,18 @@ describe('AuthController', () => {
   });
 
   describe('login', () => {
-    it('should return access_token when user is attached by LocalAuthGuard', () => {
+    it('should return JSON with access_token when login is successful', async () => {
       const req = { user: mockUser };
       const loginPayload: LoginPayload = { email: 'admin@example.com', password: 'admin123' };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      } as unknown as Response;
 
-      const result = controller.login(req, loginPayload);
+      await controller.login(req, loginPayload, res);
 
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ access_token: 'mock-jwt-token' });
       expect(service.login).toHaveBeenCalledWith(mockUser);
     });
   });

@@ -26,7 +26,7 @@ describe('GoogleStrategy', () => {
   };
 
   const mockAuthService = {
-    findOrCreateFromGoogle: jest.fn().mockResolvedValue(mockUser),
+    processSocialProfile: jest.fn().mockResolvedValue(mockUser),
   };
 
   const mockConfigService = {
@@ -38,7 +38,7 @@ describe('GoogleStrategy', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    (mockAuthService.findOrCreateFromGoogle as jest.Mock).mockResolvedValue(mockUser);
+    (mockAuthService.processSocialProfile as jest.Mock).mockResolvedValue(mockUser);
     (mockConfigService.get as jest.Mock).mockImplementation((key: string) => {
       if (key === 'GOOGLE_CLIENT_ID') return 'client-id';
       return undefined;
@@ -64,7 +64,7 @@ describe('GoogleStrategy', () => {
     it('should return user when Google profile is valid and configured', async () => {
       const result = await strategy.validate('access', 'refresh', mockProfile);
       expect(result).toEqual(mockUser);
-      expect(authService.findOrCreateFromGoogle).toHaveBeenCalledWith(mockProfile);
+      expect(authService.processSocialProfile).toHaveBeenCalledWith(mockProfile, 'google');
     });
 
     it('should throw UnauthorizedException when Google is not configured', async () => {
