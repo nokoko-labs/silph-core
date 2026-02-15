@@ -88,3 +88,23 @@ model Account {
   @@unique([provider, providerAccountId])
   @@map("accounts")
 }
+
+enum EmailStatus {
+  SENT
+  FAILED
+  PENDING
+}
+
+model EmailLog {
+  id           String      @id @default(uuid())
+  to           String
+  subject      String
+  provider     String
+  status       EmailStatus @default(PENDING)
+  errorMessage String?
+  sentAt       DateTime    @default(now())
+  tenantId     String?
+  createdAt    DateTime    @default(now())
+
+  @@map("email_logs")
+}

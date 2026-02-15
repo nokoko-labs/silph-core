@@ -1,5 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EmailStatus } from '@prisma/client';
+import { ClsService } from 'nestjs-cls';
+import { PrismaService } from '@/database/prisma.service';
 import { EmailProvider } from './interfaces/email-provider.interface';
 
 @Injectable()
@@ -9,10 +12,48 @@ export class MailService {
   constructor(
     private readonly configService: ConfigService,
     @Inject('EmailProvider') private readonly provider: EmailProvider,
+    private readonly prisma: PrismaService,
+    private readonly cls: ClsService,
   ) {}
 
-  async send(to: string, subject: string, template: string, context: any = {}) {
-    return this.provider.send(to, subject, template, context);
+  async send(to: string, subject: string, template: string, context: Record<string, unknown> = {}) {
+    const providerName = this.provider.getName();
+    const tenantId = this.cls.get<string>('tenantId');
+
+    try {
+      await this.provider.send(to, subject, template, context);
+
+      // Async logging without blocking (fire and forget)
+      this.prisma.emailLog
+        .create({
+          data: {
+            to,
+            subject,
+            provider: providerName,
+            status: EmailStatus.SENT,
+            tenantId,
+          },
+        })
+        .catch((err) => this.logger.error('Failed to create success EmailLog', err.stack));
+    } catch (error) {
+      this.logger.error(`Error sending email to ${to} via ${providerName}`, error.stack);
+
+      // Async logging of failure
+      this.prisma.emailLog
+        .create({
+          data: {
+            to,
+            subject,
+            provider: providerName,
+            status: EmailStatus.FAILED,
+            errorMessage: error.message || String(error),
+            tenantId,
+          },
+        })
+        .catch((err) => this.logger.error('Failed to create failure EmailLog', err.stack));
+
+      throw error;
+    }
   }
 
   async sendResetPasswordEmail(email: string, token: string) {

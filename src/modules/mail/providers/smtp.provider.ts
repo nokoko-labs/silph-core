@@ -24,11 +24,15 @@ export class SmtpProvider implements EmailProvider {
     });
   }
 
+  getName(): string {
+    return 'SMTP';
+  }
+
   async send(
     to: string,
     subject: string,
     template: string,
-    _context: Record<string, unknown>,
+    _context: Record<string, unknown> = {},
   ): Promise<void> {
     try {
       await this.transporter.sendMail({

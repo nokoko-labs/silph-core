@@ -13,6 +13,10 @@ export class ResendProvider implements EmailProvider {
     this.resend = new Resend(apiKey);
   }
 
+  getName(): string {
+    return 'Resend';
+  }
+
   async send(
     to: string,
     subject: string,

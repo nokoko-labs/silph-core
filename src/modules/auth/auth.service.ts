@@ -8,7 +8,8 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { User } from '@prisma/client';
+import { Tenant, User } from '@prisma/client';
+
 import * as bcrypt from 'bcryptjs';
 import { verify } from 'otplib';
 import { RedisService } from '@/cache/redis.service';
@@ -138,7 +139,7 @@ export class AuthService {
     return newUser;
   }
 
-  async login(user: User & { tenant?: any }): Promise<LoginResult> {
+  async login(user: User & { tenant?: Tenant | null }): Promise<LoginResult> {
     const tenant =
       user.tenant || (await this.prisma.tenant.findUnique({ where: { id: user.tenantId } }));
 
