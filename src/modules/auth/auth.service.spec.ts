@@ -232,8 +232,8 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should return access_token with JWT payload', () => {
-      const result = service.login(mockUser);
+    it('should return access_token with JWT payload', async () => {
+      const result = await service.login(mockUser);
 
       expect(result).toEqual({ access_token: 'mock-jwt-token' });
       expect(jwtService.sign).toHaveBeenCalledWith(
