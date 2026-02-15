@@ -18,11 +18,13 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { GoogleAuthGuard } from '@/common/guards/google-auth.guard';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { LocalAuthGuard } from '@/common/guards/local-auth.guard';
+import { MfaAuthGuard } from '@/common/guards/mfa-auth.guard';
 import { AuthService, JwtPayload } from './auth.service';
 import { ForgotPasswordDto, forgotPasswordSchema } from './dto/forgot-password.dto';
 import { LoginDto, type LoginPayload, loginSchema } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';
+import { MfaVerifyDto, mfaVerifySchema } from './dto/mfa-verify.dto';
 import { OauthExchangeDto, oauthExchangeSchema } from './dto/oauth-exchange.dto';
 import { ResetPasswordDto, resetPasswordSchema } from './dto/reset-password.dto';
 
@@ -41,8 +43,18 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid input (e.g. invalid email format)' })
   @ApiResponse({ status: 401, description: 'Invalid email or password' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  login(@Request() req: { user: User }, @Body() _payload: LoginPayload) {
-    return this.authService.login(req.user);
+  async login(
+    @Request() req: { user: User },
+    @Body() _payload: LoginPayload,
+    @Res() res: Response,
+  ) {
+    const result = await this.authService.login(req.user);
+
+    if ('message' in result && result.message === 'MFA_REQUIRED') {
+      return res.status(202).json(result);
+    }
+
+    return res.status(200).json(result);
   }
 
   @Get('google')
@@ -77,8 +89,17 @@ export class AuthController {
       return res.redirect(302, url.toString());
     }
 
-    const payload = this.authService.login(req.user);
-    return res.status(200).json(payload);
+    const result = await this.authService.login(req.user);
+
+    if ('message' in result && result.message === 'MFA_REQUIRED') {
+      // For Google callback with redirect, we might need to handle MFA differently
+      // but for now we follow the same JSON logic if no redirect, or we could redirect to an MFA page.
+      // If redirectUrl is active, the frontend will get the code and exchange it.
+      // We should update exchangeOAuthCode to also return MFA_REQUIRED if needed.
+      return res.status(202).json(result);
+    }
+
+    return res.status(200).json(result);
   }
 
   @Post('oauth/exchange')
@@ -145,5 +166,18 @@ export class AuthController {
   async resetPassword(@Body() payload: ResetPasswordDto) {
     await this.authService.resetPassword(payload.token, payload.newPassword);
     return { message: 'Password has been successfully updated.' };
+  }
+
+  @Post('mfa/verify')
+  @UseGuards(MfaAuthGuard)
+  @UsePipes(new ZodValidationPipe(mfaVerifySchema))
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Verify MFA code' })
+  @ApiBody({ type: MfaVerifyDto, description: 'MFA token and 6-digit code' })
+  @ApiResponse({ status: 200, description: 'Returns final JWT tokens', type: LoginResponseDto })
+  @ApiResponse({ status: 401, description: 'Invalid MFA code or too many attempts' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async verifyMfa(@Request() req: { user: { userId: string } }, @Body() payload: MfaVerifyDto) {
+    return this.authService.verifyMfa(req.user.userId, payload.code);
   }
 }

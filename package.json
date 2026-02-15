@@ -167,6 +167,9 @@
       ".*\\.module\\.ts$",
       "main.ts"
     ],
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(otplib|@otplib|@scure|uint8arraytools)/)"
+    ],
     "testEnvironment": "node"
   },
   "prisma": {

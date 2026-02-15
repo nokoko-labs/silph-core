@@ -15,6 +15,10 @@ jest.mock('bcryptjs', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
 }));
 
+jest.mock('otplib', () => ({
+  verify: jest.fn().mockReturnValue(true),
+}));
+
 describe('AuthService', () => {
   let service: AuthService;
   let prisma: DeepMockProxy<PrismaService>;
@@ -293,6 +297,7 @@ describe('AuthService', () => {
         status: mockUser.status,
       });
       mockRedisService.get.mockResolvedValue(mockCodeData);
+      prisma.user.findUnique.mockResolvedValue(mockUser as unknown as User);
 
       const result = await service.exchangeOAuthCode('valid-code');
 
@@ -480,6 +485,68 @@ describe('AuthService', () => {
       expect(prisma.passwordResetToken.delete).toHaveBeenCalledWith({
         where: { id: 'token-uuid' },
       });
+    });
+  });
+
+  describe('MFA Validation', () => {
+    it('should return MFA_REQUIRED if tenant requires MFA', async () => {
+      const userWithMfaTenant = {
+        ...mockUser,
+        tenant: { ...mockUser.tenant, mfaRequired: true },
+      };
+
+      const result = await service.login(userWithMfaTenant as any);
+
+      expect(result).toMatchObject({
+        message: 'MFA_REQUIRED',
+        mfaToken: expect.any(String),
+      });
+    });
+
+    it('should return MFA_REQUIRED if user has mfaEnabled', async () => {
+      const userWithMfaEnabled = {
+        ...mockUser,
+        mfaEnabled: true,
+      };
+
+      const result = await service.login(userWithMfaEnabled as unknown as User);
+
+      expect(result).toMatchObject({
+        message: 'MFA_REQUIRED',
+        mfaToken: expect.any(String),
+      });
+    });
+
+    it('should verify MFA code and return tokens', async () => {
+      const userWithSecret = { ...mockUser, mfaSecret: 'JBSWY3DPEHPK3PXP' };
+      prisma.user.findUnique.mockResolvedValue(userWithSecret as unknown as User);
+      mockRedisService.get.mockResolvedValue(null);
+      (require('otplib').verify as jest.Mock).mockReturnValue(true);
+
+      const result = await service.verifyMfa(mockUser.id, '123456');
+
+      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(mockRedisService.del).toHaveBeenCalledWith(`mfa_attempts:${mockUser.id}`);
+    });
+
+    it('should throw UnauthorizedException on invalid MFA code', async () => {
+      const userWithSecret = { ...mockUser, mfaSecret: 'JBSWY3DPEHPK3PXP' };
+      prisma.user.findUnique.mockResolvedValue(userWithSecret as unknown as User);
+      mockRedisService.get.mockResolvedValue('0');
+      (require('otplib').verify as jest.Mock).mockReturnValue(false);
+
+      await expect(service.verifyMfa(mockUser.id, '111111')).rejects.toThrow(UnauthorizedException);
+      expect(mockRedisService.set).toHaveBeenCalled();
+    });
+
+    it('should throw UnauthorizedException if too many attempts', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        mfaSecret: 'secret',
+      } as unknown as User);
+      mockRedisService.get.mockResolvedValue('5');
+
+      await expect(service.verifyMfa(mockUser.id, '123456')).rejects.toThrow('Too many attempts');
     });
   });
 });

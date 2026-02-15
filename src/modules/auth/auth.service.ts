@@ -10,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { verify } from 'otplib';
 import { RedisService } from '@/cache/redis.service';
 import { PrismaService } from '@/database/prisma.service';
 import { MailService } from '@/modules/mail/mail.service';
@@ -21,6 +22,8 @@ export type JwtPayload = {
   tenantId: string;
   status: string;
 };
+
+export type LoginResult = { access_token: string } | { message: string; mfaToken: string };
 
 @Injectable()
 export class AuthService {
@@ -135,7 +138,27 @@ export class AuthService {
     return newUser;
   }
 
-  login(user: User): { access_token: string } {
+  async login(user: User & { tenant?: any }): Promise<LoginResult> {
+    const tenant =
+      user.tenant || (await this.prisma.tenant.findUnique({ where: { id: user.tenantId } }));
+
+    // Check if MFA is required: Tenant requirement or User voluntary enablement
+    const isMfaRequired = tenant?.mfaRequired || user.mfaEnabled;
+
+    if (isMfaRequired) {
+      // If MFA is required but not configured, we still issue the mfaToken
+      // The frontend will decide if it shows verification or setup based on user state
+      const mfaToken = this.createMfaToken(user);
+      return {
+        message: 'MFA_REQUIRED',
+        mfaToken,
+      };
+    }
+
+    return this.loginSuccess(user);
+  }
+
+  private loginSuccess(user: User) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -147,6 +170,56 @@ export class AuthService {
       expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '7d'),
     });
     return { access_token };
+  }
+
+  createMfaToken(user: User): string {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      type: 'mfa',
+    };
+    // Use a short-lived token (5 min) for MFA challenge
+    return this.jwtService.sign(payload, {
+      expiresIn: '5m',
+      // We can use the same secret or a dedicated one if configured
+      secret:
+        this.configService.get<string>('JWT_MFA_SECRET') ||
+        this.configService.get<string>('JWT_SECRET'),
+    });
+  }
+
+  async verifyMfa(userId: string, code: string): Promise<{ access_token: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { tenant: true },
+    });
+
+    if (!user || !user.mfaSecret) {
+      throw new UnauthorizedException('MFA not configured or user not found');
+    }
+
+    // Implement throttling (e.g., 5 attempts per 5 minutes)
+    const throttleKey = `mfa_attempts:${userId}`;
+    const attemptsStr = await this.redisService.get(throttleKey);
+    const attempts = attemptsStr ? Number.parseInt(attemptsStr, 10) : 0;
+
+    if (attempts >= 5) {
+      throw new UnauthorizedException('Too many attempts. Please try again in a few minutes.');
+    }
+
+    const isValid = verify({
+      token: code,
+      secret: user.mfaSecret,
+    });
+
+    if (!isValid) {
+      await this.redisService.set(throttleKey, (attempts + 1).toString(), 300); // 5 minutes TTL
+      throw new UnauthorizedException('Invalid MFA code');
+    }
+
+    // Success: clear attempts and login
+    await this.redisService.del(throttleKey);
+    return this.loginSuccess(user);
   }
 
   /** URL to redirect after OAuth success (SPA); undefined = return JSON. */
@@ -203,7 +276,7 @@ export class AuthService {
     return code;
   }
 
-  async exchangeOAuthCode(code: string): Promise<{ access_token: string }> {
+  async exchangeOAuthCode(code: string): Promise<LoginResult> {
     const key = `oauth_code:${code}`;
     const data = await this.redisService.get(key);
 
@@ -214,19 +287,16 @@ export class AuthService {
     await this.redisService.del(key);
 
     const userPayload = JSON.parse(data);
-    const payload: JwtPayload = {
-      sub: userPayload.userId,
-      email: userPayload.email,
-      role: userPayload.role,
-      tenantId: userPayload.tenantId,
-      status: userPayload.status || 'ACTIVE', // Fallback for transition
-    };
-
-    const access_token = this.jwtService.sign(payload, {
-      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '7d'),
+    const user = await this.prisma.user.findUnique({
+      where: { id: userPayload.userId },
+      include: { tenant: true },
     });
 
-    return { access_token };
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    return this.login(user); // This will handle MFA challenge if needed
   }
 
   /**
@@ -234,7 +304,7 @@ export class AuthService {
    * Validates that the user (by email) exists in the target tenant and is ACTIVE/PENDING.
    * Also validates that the target tenant is ACTIVE and not deleted.
    */
-  async switchTenant(userId: string, targetTenantId: string): Promise<{ access_token: string }> {
+  async switchTenant(userId: string, targetTenantId: string): Promise<LoginResult> {
     // 1. Get current user's email
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
