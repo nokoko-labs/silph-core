@@ -13,3 +13,13 @@ export const LoginResponseSchema = z.object({
 export type LoginResponsePayload = z.infer<typeof LoginResponseSchema>;
 
 export class LoginResponseDto extends createZodDto(LoginResponseSchema) {}
+
+/**
+ * Response DTO for 403 MFA_REQUIRED.
+ */
+export const MfaRequiredResponseSchema = z.object({
+  message: z.literal('MFA_REQUIRED').describe('Error code'),
+  ticket: z.string().describe('Temporary ticket for MFA verification'),
+});
+
+export class MfaRequiredResponseDto extends createZodDto(MfaRequiredResponseSchema) {}

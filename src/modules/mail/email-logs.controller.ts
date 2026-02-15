@@ -17,7 +17,13 @@ export class EmailLogsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all email logs (Super Admin only)' })
-  @ApiResponse({ status: 200, type: [EmailLogResponseDto] })
+  @ApiResponse({
+    status: 200,
+    description: 'List of email logs',
+    type: EmailLogResponseDto,
+    isArray: true,
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(): Promise<EmailLogResponseDto[]> {
     const logs = await this.prisma.emailLog.findMany({
       orderBy: { sentAt: 'desc' },

@@ -1,25 +1,6 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { CreateUserSchema } from './create-user.dto';
 
-export class UpdateUserDto {
-  @ApiPropertyOptional({ example: 'user@example.com', description: 'User email address' })
-  @IsOptional()
-  @IsEmail()
-  email?: string;
+export const UpdateUserSchema = CreateUserSchema.partial();
 
-  @ApiPropertyOptional({
-    example: 'newpassword123',
-    minLength: 6,
-    description: 'User password',
-  })
-  @IsOptional()
-  @IsString()
-  @MinLength(6)
-  password?: string;
-
-  @ApiPropertyOptional({ enum: Role, description: 'User role' })
-  @IsOptional()
-  @IsEnum(Role)
-  role?: Role;
-}
+export class UpdateUserDto extends createZodDto(UpdateUserSchema) {}

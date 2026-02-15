@@ -1,22 +1,26 @@
-import { ApiProperty } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-export class UserResponseDto {
-  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'User UUID' })
-  id: string;
+export const UserResponseSchema = z.object({
+  id: z.string().uuid().describe('User UUID'),
+  email: z.string().email().describe('User email address'),
+  role: z.nativeEnum(Role).describe('User role'),
+  tenantId: z.string().uuid().describe('Tenant UUID'),
+  createdAt: z.date().describe('Creation timestamp'),
+  updatedAt: z.date().describe('Last update timestamp'),
+  accounts: z
+    .array(
+      z.object({
+        id: z.string().uuid().describe('Account UUID'),
+        provider: z.string().describe('Provider name (e.g. google)'),
+        providerAccountId: z.string().describe('Provider account ID'),
+        createdAt: z.date().describe('Account creation timestamp'),
+        updatedAt: z.date().describe('Account update timestamp'),
+      }),
+    )
+    .optional()
+    .describe('Linked social accounts'),
+});
 
-  @ApiProperty({ example: 'user@example.com', description: 'User email address' })
-  email: string;
-
-  @ApiProperty({ enum: Role, description: 'User role' })
-  role: Role;
-
-  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'Tenant UUID' })
-  tenantId: string;
-
-  @ApiProperty({ description: 'Creation timestamp' })
-  createdAt: Date;
-
-  @ApiProperty({ description: 'Last update timestamp' })
-  updatedAt: Date;
-}
+export class UserResponseDto extends createZodDto(UserResponseSchema) {}

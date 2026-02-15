@@ -125,6 +125,7 @@ export class TenantsController {
   @ApiOperation({ summary: 'Update a tenant' })
   @ApiBody({ type: UpdateTenantDto, description: 'Tenant data to update' })
   @ApiResponse({ status: 200, description: 'Tenant updated successfully', type: TenantResponseDto })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   @ApiResponse({ status: 409, description: 'Tenant with same slug already exists' })
   @ApiResponse({ status: 500, description: 'Internal server error' })

@@ -1,37 +1,12 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import {
-  IsEmail,
-  IsEnum,
-  IsNotEmpty,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MinLength,
-} from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 
-export class CreateUserDto {
-  @ApiProperty({ example: 'user@example.com', description: 'User email address' })
-  @IsEmail()
-  email: string;
+export const CreateUserSchema = z.object({
+  email: z.string().email().describe('User email address'),
+  password: z.string().min(6).optional().describe('User password (optional for social login)'),
+  tenantId: z.string().uuid().describe('Tenant UUID'),
+  role: z.nativeEnum(Role).default(Role.USER).describe('User role'),
+});
 
-  @ApiPropertyOptional({
-    example: 'password123',
-    minLength: 6,
-    description: 'User password (optional for social login)',
-  })
-  @IsOptional()
-  @IsString()
-  @MinLength(6)
-  password?: string;
-
-  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'Tenant UUID' })
-  @IsUUID()
-  @IsNotEmpty()
-  tenantId: string;
-
-  @ApiPropertyOptional({ enum: Role, default: Role.USER, description: 'User role' })
-  @IsOptional()
-  @IsEnum(Role)
-  role?: Role;
-}
+export class CreateUserDto extends createZodDto(CreateUserSchema) {}

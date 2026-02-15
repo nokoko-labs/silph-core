@@ -9,7 +9,14 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
@@ -31,7 +38,9 @@ export class UsersController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth('BearerAuth')
   @ApiOperation({ summary: 'Create a new user' })
-  @ApiResponse({ status: 201, type: UserResponseDto })
+  @ApiBody({ type: CreateUserDto })
+  @ApiResponse({ status: 201, description: 'User created successfully', type: UserResponseDto })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
   async create(
     @Body() createUserDto: CreateUserDto,
     @CurrentUser() currentUser: JwtPayload,
@@ -48,7 +57,8 @@ export class UsersController {
   @Roles(Role.ADMIN)
   @ApiBearerAuth('BearerAuth')
   @ApiOperation({ summary: 'Get all users' })
-  @ApiResponse({ status: 200, type: [UserResponseDto] })
+  @ApiResponse({ status: 200, description: 'List of users', type: UserResponseDto, isArray: true })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
   async findAll(@CurrentUser() user: JwtPayload): Promise<UserResponseDto[]> {
     if (user.status !== 'ACTIVE') {
       throw new ForbiddenException('Only active admins can list users');
@@ -61,7 +71,9 @@ export class UsersController {
   @ApiBearerAuth('BearerAuth')
   @ApiOperation({ summary: 'Get a user by ID' })
   @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiResponse({ status: 200, description: 'User found', type: UserResponseDto })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   async findOne(
     @Param('id') id: string,
     @CurrentUser() currentUser: JwtPayload,
@@ -86,7 +98,10 @@ export class UsersController {
   @ApiBearerAuth('BearerAuth')
   @ApiOperation({ summary: 'Update a user' })
   @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'User updated successfully', type: UserResponseDto })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   async update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
@@ -110,7 +125,9 @@ export class UsersController {
   @ApiBearerAuth('BearerAuth')
   @ApiOperation({ summary: 'Delete a user' })
   @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({ status: 200, type: UserResponseDto })
+  @ApiResponse({ status: 200, description: 'User deleted successfully', type: UserResponseDto })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   async remove(
     @Param('id') id: string,
     @CurrentUser() currentUser: JwtPayload,

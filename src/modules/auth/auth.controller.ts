@@ -22,7 +22,7 @@ import { MfaAuthGuard } from '@/common/guards/mfa-auth.guard';
 import { AuthService, JwtPayload } from './auth.service';
 import { ForgotPasswordDto, forgotPasswordSchema } from './dto/forgot-password.dto';
 import { LoginDto, type LoginPayload, loginSchema } from './dto/login.dto';
-import { LoginResponseDto } from './dto/login-response.dto';
+import { LoginResponseDto, MfaRequiredResponseDto } from './dto/login-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';
 import { MfaVerifyDto, mfaVerifySchema } from './dto/mfa-verify.dto';
 import { OauthExchangeDto, oauthExchangeSchema } from './dto/oauth-exchange.dto';
@@ -40,6 +40,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiBody({ type: LoginDto, description: 'Email and password' })
   @ApiResponse({ status: 200, description: 'Returns JWT access token', type: LoginResponseDto })
+  @ApiResponse({ status: 202, description: 'MFA Required', type: MfaRequiredResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid input (e.g. invalid email format)' })
   @ApiResponse({ status: 401, description: 'Invalid email or password' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
@@ -76,6 +77,7 @@ export class AuthController {
     description: 'Returns JWT if OAUTH_SUCCESS_REDIRECT_URL not set',
     type: LoginResponseDto,
   })
+  @ApiResponse({ status: 202, description: 'MFA Required', type: MfaRequiredResponseDto })
   @ApiResponse({ status: 302, description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL' })
   @ApiResponse({ status: 401, description: 'Google auth failed or not configured' })
   @ApiResponse({ status: 500, description: 'Internal server error' })

@@ -12,6 +12,8 @@ export const TenantResponseSchema = z.object({
   slug: z.string().describe('URL-friendly identifier'),
   status: z.nativeEnum(TenantStatus).describe('Current status of the tenant'),
   config: z.any().nullable().optional().describe('Optional tenant configuration'),
+  mfaRequired: z.boolean().describe('Whether MFA is required for this tenant'),
+  enabledAuthProviders: z.array(z.string()).describe('List of enabled authentication providers'),
   createdAt: z.date().describe('Creation timestamp'),
   updatedAt: z.date().describe('Last update timestamp'),
 });

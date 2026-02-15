@@ -1,3 +1,4 @@
+import { Role } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
@@ -7,7 +8,7 @@ import { z } from 'zod';
 export const MeResponseSchema = z.object({
   sub: z.string().describe('User ID (JWT subject)'),
   email: z.string().email().describe('User email'),
-  role: z.enum(['ADMIN', 'USER']).describe('User role'),
+  role: z.nativeEnum(Role).describe('User role'),
   tenantId: z.string().describe('Tenant ID'),
 });
 
