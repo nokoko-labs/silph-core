@@ -101,7 +101,13 @@ export class TenantsController {
   @ApiResponse({ status: 200, description: 'Tenant found', type: TenantResponseDto })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  async findBySlug(@Param('slug') slug: string): Promise<TenantResponseDto> {
+  async findBySlug(
+    @Param('slug') slug: string,
+    @CurrentUser() user?: JwtPayload,
+  ): Promise<TenantResponseDto> {
+    if (user != null && user.status !== 'ACTIVE') {
+      throw new ForbiddenException('Only active users can access this');
+    }
     return this.tenantsService.findBySlug(slug);
   }
 
