@@ -93,28 +93,16 @@ export class TenantsController {
   }
 
   @Get('slug/:slug')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
-  @ApiBearerAuth('BearerAuth')
-  @ApiOperation({ summary: 'Get tenant by slug' })
+  @Public()
+  @ApiOperation({
+    summary: 'Get tenant by slug (Public)',
+    description: 'Used during login flow to resolve tenant before credentials. No auth required.',
+  })
   @ApiResponse({ status: 200, description: 'Tenant found', type: TenantResponseDto })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  async findBySlug(
-    @Param('slug') slug: string,
-    @CurrentUser() user: JwtPayload,
-  ): Promise<TenantResponseDto> {
-    if (user.status !== 'ACTIVE') {
-      throw new ForbiddenException('Only active users can access this');
-    }
-    const tenant = await this.tenantsService.findBySlug(slug);
-
-    // Manual ownership check for by-slug route as it's not ID-based
-    if (user.role !== Role.SUPER_ADMIN && user.tenantId !== tenant.id) {
-      throw new ForbiddenException('You do not have access to this tenant resource');
-    }
-
-    return tenant;
+  async findBySlug(@Param('slug') slug: string): Promise<TenantResponseDto> {
+    return this.tenantsService.findBySlug(slug);
   }
 
   @Patch(':id')
