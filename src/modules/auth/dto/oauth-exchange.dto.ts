@@ -6,6 +6,11 @@ export const oauthExchangeSchema = z.object({
     .string()
     .min(1, 'Code is required')
     .describe('OAuth authorization code from Google callback redirect'),
+  tenantSlug: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Tenant context (for logging/audit); primary context comes from OAuth init'),
 });
 
 export type OauthExchangePayload = z.infer<typeof oauthExchangeSchema>;

@@ -1,7 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { Role } from '@prisma/client';
+import { RedisService } from '@/cache/redis.service';
 import { AuthService } from '../auth.service';
 import { GoogleStrategy } from './google.strategy';
 
@@ -9,15 +9,7 @@ describe('GoogleStrategy', () => {
   let strategy: GoogleStrategy;
   let authService: AuthService;
 
-  const mockUser = {
-    id: 'user-1',
-    email: 'user@gmail.com',
-    password: null as string | null,
-    role: 'USER' as Role,
-    tenantId: 'tenant-1',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+  const mockLoginResult = { access_token: 'mock-jwt-token' };
 
   const mockProfile = {
     id: 'google-sub-123',
@@ -25,8 +17,10 @@ describe('GoogleStrategy', () => {
     displayName: 'Test User',
   };
 
+  const mockReq = { oauthContextState: undefined as { tenantSlug?: string } | undefined };
+
   const mockAuthService = {
-    processSocialProfile: jest.fn().mockResolvedValue(mockUser),
+    processSocialProfile: jest.fn().mockResolvedValue(mockLoginResult),
   };
 
   const mockConfigService = {
@@ -36,9 +30,12 @@ describe('GoogleStrategy', () => {
     }),
   };
 
+  const mockRedisService = { get: jest.fn(), set: jest.fn(), del: jest.fn() };
+
   beforeEach(async () => {
     jest.clearAllMocks();
-    (mockAuthService.processSocialProfile as jest.Mock).mockResolvedValue(mockUser);
+    mockReq.oauthContextState = undefined;
+    (mockAuthService.processSocialProfile as jest.Mock).mockResolvedValue(mockLoginResult);
     (mockConfigService.get as jest.Mock).mockImplementation((key: string) => {
       if (key === 'GOOGLE_CLIENT_ID') return 'client-id';
       return undefined;
@@ -49,6 +46,7 @@ describe('GoogleStrategy', () => {
         GoogleStrategy,
         { provide: AuthService, useValue: mockAuthService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
 
@@ -61,19 +59,29 @@ describe('GoogleStrategy', () => {
   });
 
   describe('validate', () => {
-    it('should return user when Google profile is valid and configured', async () => {
-      const result = await strategy.validate('access', 'refresh', mockProfile);
-      expect(result).toEqual(mockUser);
-      expect(authService.processSocialProfile).toHaveBeenCalledWith(mockProfile, 'google');
+    it('should return LoginResult when Google profile is valid and configured', async () => {
+      const result = await strategy.validate(mockReq, 'access', 'refresh', mockProfile);
+      expect(result).toEqual(mockLoginResult);
+      expect(authService.processSocialProfile).toHaveBeenCalledWith(
+        mockProfile,
+        'google',
+        undefined,
+      );
+    });
+
+    it('should pass contextTenantSlug from req.oauthContextState to processSocialProfile', async () => {
+      mockReq.oauthContextState = { tenantSlug: 'acme' };
+      await strategy.validate(mockReq, 'access', 'refresh', mockProfile);
+      expect(authService.processSocialProfile).toHaveBeenCalledWith(mockProfile, 'google', 'acme');
     });
 
     it('should throw UnauthorizedException when Google is not configured', async () => {
       (mockConfigService.get as jest.Mock).mockReturnValue(undefined);
 
-      await expect(strategy.validate('access', 'refresh', mockProfile)).rejects.toThrow(
+      await expect(strategy.validate(mockReq, 'access', 'refresh', mockProfile)).rejects.toThrow(
         UnauthorizedException,
       );
-      await expect(strategy.validate('access', 'refresh', mockProfile)).rejects.toThrow(
+      await expect(strategy.validate(mockReq, 'access', 'refresh', mockProfile)).rejects.toThrow(
         'Google login is not configured',
       );
     });

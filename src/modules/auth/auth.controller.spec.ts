@@ -27,10 +27,14 @@ describe('AuthController', () => {
   };
 
   const mockAuthService = {
-    login: jest.fn().mockReturnValue({ access_token: 'mock-jwt-token' }),
+    attemptLogin: jest.fn().mockResolvedValue({ access_token: 'mock-jwt-token' }),
     getOAuthSuccessRedirectUrl: jest.fn(),
-    generateOAuthCode: jest.fn().mockResolvedValue('mock-oauth-code'),
+    buildOAuthRedirectUrl: jest
+      .fn()
+      .mockResolvedValue('http://localhost:3000/?code=mock-oauth-code'),
     exchangeOAuthCode: jest.fn().mockResolvedValue({ access_token: 'mock-jwt-token' }),
+    login: jest.fn().mockResolvedValue({ access_token: 'mock-jwt-token' }),
+    selectTenant: jest.fn().mockResolvedValue({ access_token: 'mock-jwt-token' }),
   };
 
   beforeEach(async () => {
@@ -49,19 +53,100 @@ describe('AuthController', () => {
   });
 
   describe('login', () => {
-    it('should return JSON with access_token when login is successful', async () => {
-      const req = { user: mockUser };
+    it('should return JSON with access_token when login is successful (single tenant)', async () => {
       const loginPayload: LoginPayload = { email: 'admin@example.com', password: 'admin123' };
       const res = {
         status: jest.fn().mockReturnThis(),
         json: jest.fn().mockReturnThis(),
       } as unknown as Response;
 
-      await controller.login(req, loginPayload, res);
+      await controller.login(loginPayload, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ access_token: 'mock-jwt-token' });
-      expect(service.login).toHaveBeenCalledWith(mockUser);
+      expect(service.attemptLogin).toHaveBeenCalledWith(loginPayload.email, loginPayload.password);
+    });
+
+    it('should return 202 with MFA_REQUIRED when MFA is needed', async () => {
+      mockAuthService.attemptLogin.mockResolvedValueOnce({
+        message: 'MFA_REQUIRED',
+        mfaToken: 'mfa-temp-token',
+      });
+      const loginPayload: LoginPayload = { email: 'admin@example.com', password: 'admin123' };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      } as unknown as Response;
+
+      await controller.login(loginPayload, res);
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'MFA_REQUIRED',
+        mfaToken: 'mfa-temp-token',
+      });
+    });
+
+    it('should return tenant selection when user has multiple tenants', async () => {
+      mockAuthService.attemptLogin.mockResolvedValueOnce({
+        tenants: [
+          { id: 't1', name: 'Tenant A', slug: 'tenant-a' },
+          { id: 't2', name: 'Tenant B', slug: 'tenant-b' },
+        ],
+        tempToken: 'temp-jwt-token',
+      });
+      const loginPayload: LoginPayload = { email: 'user@example.com', password: 'pass' };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      } as unknown as Response;
+
+      await controller.login(loginPayload, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        tenants: [
+          { id: 't1', name: 'Tenant A', slug: 'tenant-a' },
+          { id: 't2', name: 'Tenant B', slug: 'tenant-b' },
+        ],
+        tempToken: 'temp-jwt-token',
+      });
+    });
+  });
+
+  describe('selectTenant', () => {
+    it('should return JWT when tempToken and tenantId are valid', async () => {
+      const payload = { tempToken: 'valid-temp-token', tenantId: 'tenant-uuid-1' };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      } as unknown as Response;
+
+      await controller.selectTenant(payload, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ access_token: 'mock-jwt-token' });
+      expect(service.selectTenant).toHaveBeenCalledWith(payload.tempToken, payload.tenantId);
+    });
+
+    it('should return 202 when MFA is required for selected tenant', async () => {
+      mockAuthService.selectTenant.mockResolvedValueOnce({
+        message: 'MFA_REQUIRED',
+        mfaToken: 'mfa-temp-token',
+      });
+      const payload = { tempToken: 'valid-temp-token', tenantId: 'tenant-uuid-1' };
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      } as unknown as Response;
+
+      await controller.selectTenant(payload, res);
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'MFA_REQUIRED',
+        mfaToken: 'mfa-temp-token',
+      });
     });
   });
 
@@ -74,9 +159,10 @@ describe('AuthController', () => {
   });
 
   describe('googleAuthCallback', () => {
-    it('should redirect with code when redirectUrl is configured', async () => {
+    it('should redirect when redirectUrl is configured', async () => {
       mockAuthService.getOAuthSuccessRedirectUrl.mockReturnValue('http://localhost:3000');
-      const req = { user: mockUser };
+      const loginResult = { access_token: 'mock-jwt-token' };
+      const req = { user: loginResult };
       const res = {
         redirect: jest.fn(),
       } as unknown as Response;
@@ -84,12 +170,13 @@ describe('AuthController', () => {
       await controller.googleAuthCallback(req, res);
 
       expect(res.redirect).toHaveBeenCalledWith(302, 'http://localhost:3000/?code=mock-oauth-code');
-      expect(mockAuthService.generateOAuthCode).toHaveBeenCalledWith(mockUser);
+      expect(mockAuthService.buildOAuthRedirectUrl).toHaveBeenCalledWith(loginResult);
     });
 
     it('should return JSON when redirectUrl is not configured', async () => {
       mockAuthService.getOAuthSuccessRedirectUrl.mockReturnValue(undefined);
-      const req = { user: mockUser };
+      const loginResult = { access_token: 'mock-jwt-token' };
+      const req = { user: loginResult };
       const res = {
         status: jest.fn().mockReturnThis(),
         json: jest.fn().mockReturnThis(),
@@ -98,7 +185,7 @@ describe('AuthController', () => {
       await controller.googleAuthCallback(req, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ access_token: 'mock-jwt-token' });
+      expect(res.json).toHaveBeenCalledWith(loginResult);
     });
   });
 

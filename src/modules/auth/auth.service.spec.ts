@@ -1,13 +1,20 @@
-import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { type Account, Role, type User } from '@prisma/client';
+import {
+  type Account,
+  type PasswordResetToken,
+  Role,
+  type Tenant,
+  type User,
+} from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { type DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { RedisService } from '@/cache/redis.service';
 import { PrismaService } from '@/database/prisma.service';
 import { MailService } from '@/modules/mail/mail.service';
+import { AuditLogService } from '../audit/audit-log.service';
 import { AuthService } from './auth.service';
 
 jest.mock('bcryptjs', () => ({
@@ -45,6 +52,7 @@ describe('AuthService', () => {
 
   const mockJwtService = {
     sign: jest.fn().mockReturnValue('mock-jwt-token'),
+    verify: jest.fn().mockReturnValue({ sub: 'session-id', type: 'tenant_selection' }),
   };
 
   const mockConfigService = {
@@ -69,6 +77,10 @@ describe('AuthService', () => {
     sendResetPasswordEmail: jest.fn().mockResolvedValue(true),
   };
 
+  const mockAuditLogService = {
+    create: jest.fn().mockResolvedValue({}),
+  };
+
   beforeEach(async () => {
     (bcrypt.compare as jest.Mock).mockClear().mockResolvedValue(true);
     mockPrisma.user.findFirst.mockResolvedValue(mockUser);
@@ -81,6 +93,7 @@ describe('AuthService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: RedisService, useValue: mockRedisService },
         { provide: MailService, useValue: mockMailService },
+        { provide: AuditLogService, useValue: mockAuditLogService },
       ],
     }).compile();
 
@@ -192,13 +205,16 @@ describe('AuthService', () => {
 
     const mockTenant = {
       id: 'tenant-uuid-1',
+      name: 'Test Tenant',
+      slug: 'test-tenant',
       status: 'ACTIVE',
       enabledAuthProviders: ['google', 'github'],
       deletedAt: null,
     };
 
     beforeEach(() => {
-      mockPrisma.tenant.findUnique.mockResolvedValue(mockTenant as any);
+      mockPrisma.tenant.findUnique.mockResolvedValue(mockTenant as unknown as Tenant);
+      mockPrisma.tenant.findFirst.mockResolvedValue(mockTenant as unknown as Tenant);
       (mockConfigService.get as jest.Mock).mockImplementation(
         (key: string, defaultValue?: unknown) => {
           if (key === 'OAUTH_DEFAULT_TENANT_ID') return 'tenant-uuid-1';
@@ -229,38 +245,40 @@ describe('AuthService', () => {
       );
     });
 
-    it('should return user if account already exists and is ACTIVE', async () => {
-      mockPrisma.account.findUnique.mockResolvedValue({
-        user: { ...mockUser, status: 'ACTIVE', tenant: mockTenant },
-      } as unknown as Account);
+    it('should return JWT when account already exists and user is ACTIVE', async () => {
+      mockPrisma.account.findMany.mockResolvedValue([
+        {
+          user: { ...mockUser, status: 'ACTIVE', tenant: mockTenant },
+        },
+      ] as unknown as Account[]);
 
       const result = await service.processSocialProfile(profile, 'google');
-      expect(result.status).toBe('ACTIVE');
-      expect(mockPrisma.account.findUnique).toHaveBeenCalled();
+      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(mockPrisma.account.findMany).toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException if provider is not enabled for tenant', async () => {
-      mockPrisma.account.findUnique.mockResolvedValue(null);
-      mockPrisma.tenant.findUnique.mockResolvedValue({
+      mockPrisma.account.findMany.mockResolvedValue([]);
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.tenant.findFirst.mockResolvedValue({
         ...mockTenant,
         enabledAuthProviders: ['password'], // google not here
-      } as any);
+      } as unknown as Tenant);
 
-      await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
+      await expect(service.processSocialProfile(profile, 'google', 'test-tenant')).rejects.toThrow(
         UnauthorizedException,
       );
     });
 
-    it('should link to existing user if email matches in same tenant', async () => {
-      mockPrisma.account.findUnique.mockResolvedValue(null);
-      mockPrisma.user.findFirst.mockResolvedValue({
-        ...mockUser,
-        status: 'ACTIVE',
-      } as unknown as User);
+    it('should link to existing user if email matches and return JWT', async () => {
+      mockPrisma.account.findMany.mockResolvedValue([]);
+      mockPrisma.user.findMany.mockResolvedValue([
+        { ...mockUser, status: 'ACTIVE', tenant: mockTenant, accounts: [] },
+      ] as unknown as User[]);
       mockPrisma.account.create.mockResolvedValue({} as unknown as Account);
 
       const result = await service.processSocialProfile(profile, 'google');
-      expect(result.status).toBe('ACTIVE');
+      expect(result).toEqual({ access_token: 'mock-jwt-token' });
       expect(mockPrisma.account.create).toHaveBeenCalledWith({
         data: {
           userId: mockUser.id,
@@ -270,26 +288,225 @@ describe('AuthService', () => {
       });
     });
 
-    it('should create new user and account if none exist', async () => {
-      mockPrisma.account.findUnique.mockResolvedValue(null);
-      mockPrisma.user.findFirst.mockResolvedValue(null);
+    it('should create new user and account if none exist when contextTenantSlug provided', async () => {
+      mockPrisma.account.findMany.mockResolvedValue([]);
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.tenant.findFirst.mockResolvedValue(mockTenant as unknown as Tenant);
       mockPrisma.user.create.mockResolvedValue({
         ...mockUser,
         id: 'new-user-id',
         email: profile.emails[0].value,
-      } as any);
+      } as unknown as User);
 
-      const result = await service.processSocialProfile(profile, 'google');
-      expect(result.id).toBe('new-user-id');
+      const result = await service.processSocialProfile(profile, 'google', 'test-tenant');
+      expect(result).toEqual({ access_token: 'mock-jwt-token' });
       expect(mockPrisma.user.create).toHaveBeenCalled();
     });
 
-    it('should throw UnauthorizedException if user account is SUSPENDED', async () => {
-      mockPrisma.account.findUnique.mockResolvedValue({
-        user: { ...mockUser, status: 'SUSPENDED', tenant: mockTenant },
-      } as unknown as Account);
+    it('should throw UnauthorizedException when new user and no contextTenantSlug', async () => {
+      mockPrisma.account.findMany.mockResolvedValue([]);
+      mockPrisma.user.findMany.mockResolvedValue([]);
 
       await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
+        'Sign up requires a tenant context',
+      );
+    });
+
+    it('should throw UnauthorizedException if user account is SUSPENDED', async () => {
+      mockPrisma.account.findMany.mockResolvedValue([
+        {
+          user: { ...mockUser, status: 'SUSPENDED', tenant: mockTenant },
+        },
+      ] as unknown as Account[]);
+
+      await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw NotFoundException when contextTenantSlug does not exist', async () => {
+      mockPrisma.account.findMany.mockResolvedValue([]);
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.tenant.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.processSocialProfile(profile, 'google', 'non-existent-tenant'),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.processSocialProfile(profile, 'google', 'non-existent-tenant'),
+      ).rejects.toThrow('Tenant with slug "non-existent-tenant" not found');
+    });
+
+    it('should throw UnauthorizedException when email is linked to different provider account', async () => {
+      mockPrisma.account.findMany.mockResolvedValue([]);
+      mockPrisma.user.findMany.mockResolvedValue([
+        {
+          ...mockUser,
+          status: 'ACTIVE',
+          tenant: mockTenant,
+          accounts: [{ provider: 'google', providerAccountId: 'other-google-sub' }],
+        },
+      ] as unknown as User[]);
+
+      await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should link to multiple users and return tenant selection when email exists in multiple tenants', async () => {
+      const tenant1 = { ...mockTenant, name: 'Tenant A', slug: 'tenant-a' };
+      const tenant2 = {
+        id: 'tenant-uuid-2',
+        name: 'Tenant B',
+        slug: 'tenant-b',
+        status: 'ACTIVE',
+        deletedAt: null,
+      };
+      const user2 = {
+        ...mockUser,
+        id: 'user-uuid-2',
+        tenantId: 'tenant-uuid-2',
+        tenant: tenant2,
+        accounts: [] as unknown[],
+      };
+      mockPrisma.account.findMany.mockResolvedValue([]);
+      mockPrisma.user.findMany.mockResolvedValue([
+        { ...mockUser, status: 'ACTIVE', tenant: tenant1, accounts: [] },
+        user2,
+      ] as unknown as User[]);
+      mockPrisma.account.createMany.mockResolvedValue({ count: 2 });
+
+      const result = await service.processSocialProfile(profile, 'google');
+
+      expect(result).toMatchObject({
+        tenants: expect.arrayContaining([
+          expect.objectContaining({ id: 'tenant-uuid-1', name: 'Tenant A', slug: 'tenant-a' }),
+          expect.objectContaining({ id: 'tenant-uuid-2', name: 'Tenant B', slug: 'tenant-b' }),
+        ]),
+        tempToken: 'mock-jwt-token',
+      });
+      expect(mockPrisma.account.createMany).toHaveBeenCalledWith({
+        data: [
+          { userId: mockUser.id, provider: 'google', providerAccountId: profile.id },
+          { userId: user2.id, provider: 'google', providerAccountId: profile.id },
+        ],
+        skipDuplicates: true,
+      });
+    });
+  });
+
+  describe('attemptLogin', () => {
+    beforeEach(() => {
+      mockPrisma.user.findMany.mockResolvedValue([mockUser] as unknown as User[]);
+    });
+
+    it('should throw UnauthorizedException when credentials are invalid', async () => {
+      prisma.user.findMany.mockResolvedValue([]);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.attemptLogin('unknown@example.com', 'wrong')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should return JWT when single tenant and no MFA', async () => {
+      const result = await service.attemptLogin('admin@example.com', 'admin123');
+
+      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ email: 'admin@example.com' }),
+        }),
+      );
+    });
+
+    it('should return tenant selection when user has multiple tenants', async () => {
+      const user2 = {
+        ...mockUser,
+        id: 'user-uuid-2',
+        tenantId: 'tenant-uuid-2',
+        tenant: {
+          id: 'tenant-uuid-2',
+          name: 'Tenant B',
+          slug: 'tenant-b',
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+      };
+      mockPrisma.user.findMany.mockResolvedValue([
+        { ...mockUser, tenant: { ...mockUser.tenant, name: 'Tenant A', slug: 'tenant-a' } },
+        user2,
+      ] as unknown as User[]);
+
+      const result = await service.attemptLogin('admin@example.com', 'admin123');
+
+      expect(result).toMatchObject({
+        tenants: expect.arrayContaining([
+          expect.objectContaining({ id: 'tenant-uuid-1', name: 'Tenant A', slug: 'tenant-a' }),
+          expect.objectContaining({ id: 'tenant-uuid-2', name: 'Tenant B', slug: 'tenant-b' }),
+        ]),
+        tempToken: 'mock-jwt-token',
+      });
+      expect(mockRedisService.set).toHaveBeenCalledWith(
+        expect.stringMatching(/^tenant_selection:/),
+        expect.any(String),
+        300,
+      );
+    });
+  });
+
+  describe('selectTenant', () => {
+    it('should return JWT when tempToken and tenantId are valid', async () => {
+      const sessionId = 'session-uuid';
+      const tenantUsers = [{ userId: mockUser.id, tenantId: mockUser.tenantId }];
+      (mockJwtService.verify as jest.Mock).mockReturnValue({
+        sub: sessionId,
+        type: 'tenant_selection',
+      });
+      mockRedisService.get.mockResolvedValue(JSON.stringify(tenantUsers));
+      mockPrisma.user.findFirst.mockResolvedValue(mockUser as unknown as User);
+
+      const result = await service.selectTenant('valid-temp-token', mockUser.tenantId);
+
+      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(mockRedisService.del).toHaveBeenCalledWith(`tenant_selection:${sessionId}`);
+    });
+
+    it('should throw UnauthorizedException when tempToken is invalid', async () => {
+      (mockJwtService.verify as jest.Mock).mockImplementation(() => {
+        throw new Error('invalid');
+      });
+
+      await expect(service.selectTenant('invalid-token', 'tenant-uuid-1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException when tenantId not in session', async () => {
+      (mockJwtService.verify as jest.Mock).mockReturnValue({
+        sub: 'session-uuid',
+        type: 'tenant_selection',
+      });
+      mockRedisService.get.mockResolvedValue(
+        JSON.stringify([{ userId: mockUser.id, tenantId: mockUser.tenantId }]),
+      );
+
+      await expect(service.selectTenant('valid-token', 'other-tenant-uuid')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should throw UnauthorizedException when session expired', async () => {
+      (mockJwtService.verify as jest.Mock).mockReturnValue({
+        sub: 'session-uuid',
+        type: 'tenant_selection',
+      });
+      mockRedisService.get.mockResolvedValue(null);
+
+      await expect(service.selectTenant('valid-token', mockUser.tenantId)).rejects.toThrow(
         UnauthorizedException,
       );
     });
@@ -334,21 +551,59 @@ describe('AuthService', () => {
     });
   });
 
-  describe('generateOAuthCode', () => {
-    it('should generate a code and store it in Redis', async () => {
-      const code = await service.generateOAuthCode(mockUser);
+  describe('buildOAuthRedirectUrl', () => {
+    beforeEach(() => {
+      (mockConfigService.get as jest.Mock).mockImplementation(
+        (key: string, defaultValue?: unknown) => {
+          if (key === 'OAUTH_SUCCESS_REDIRECT_URL') return 'https://app.example.com/callback';
+          if (key === 'ALLOWED_OAUTH_REDIRECT_DOMAINS')
+            return 'https://app.example.com, app.example.com';
+          if (key === 'JWT_EXPIRES_IN') return '7d';
+          if (key === 'OAUTH_CODE_EXPIRES_IN') return 60;
+          return defaultValue;
+        },
+      );
+    });
 
-      expect(code).toBeDefined();
+    it('should build URL with code when JWT result and redirect is configured', async () => {
+      const loginResult = { access_token: 'mock-jwt-token' };
+
+      const url = await service.buildOAuthRedirectUrl(loginResult);
+
+      expect(url).toContain('https://app.example.com/callback');
+      expect(url).toContain('code=');
       expect(mockRedisService.set).toHaveBeenCalledWith(
         expect.stringMatching(/^oauth_code:/),
-        expect.any(String),
+        JSON.stringify(loginResult),
         60,
       );
+    });
+
+    it('should build URL with tempToken when tenant selection result', async () => {
+      const loginResult = {
+        tenants: [{ id: 't1', name: 'Tenant 1', slug: 't1' }],
+        tempToken: 'temp-token-123',
+      };
+
+      const url = await service.buildOAuthRedirectUrl(loginResult);
+
+      expect(url).toContain('tempToken=temp-token-123');
+      expect(url).toContain('tenants=');
     });
   });
 
   describe('exchangeOAuthCode', () => {
-    it('should return JWT when code is valid', async () => {
+    it('should return JWT when code stores direct JWT result', async () => {
+      const mockCodeData = JSON.stringify({ access_token: 'stored-jwt-token' });
+      mockRedisService.get.mockResolvedValue(mockCodeData);
+
+      const result = await service.exchangeOAuthCode('valid-code');
+
+      expect(result).toEqual({ access_token: 'stored-jwt-token' });
+      expect(mockRedisService.del).toHaveBeenCalledWith('oauth_code:valid-code');
+    });
+
+    it('should return JWT when code stores legacy user payload', async () => {
       const mockCodeData = JSON.stringify({
         userId: mockUser.id,
         email: mockUser.email,
@@ -357,7 +612,10 @@ describe('AuthService', () => {
         status: mockUser.status,
       });
       mockRedisService.get.mockResolvedValue(mockCodeData);
-      prisma.user.findUnique.mockResolvedValue(mockUser as unknown as User);
+      prisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        tenant: mockUser.tenant,
+      } as unknown as User);
 
       const result = await service.exchangeOAuthCode('valid-code');
 
@@ -474,10 +732,11 @@ describe('AuthService', () => {
 
   describe('forgotPassword', () => {
     it('should generate token, hash it, save it and send email', async () => {
-      mockPrisma.passwordResetToken.create.mockResolvedValue({} as unknown as any);
+      mockPrisma.passwordResetToken.create.mockResolvedValue({} as unknown as PasswordResetToken);
 
-      await service.forgotPassword('admin@example.com');
+      const result = await service.forgotPassword('admin@example.com');
 
+      expect(result).toHaveProperty('originalToken');
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { email: 'admin@example.com', deletedAt: null },
       });
@@ -512,16 +771,28 @@ describe('AuthService', () => {
         expiresAt: new Date(Date.now() + 3600000), // 1h from now
         user: mockUser,
       };
-      mockPrisma.passwordResetToken.findUnique.mockResolvedValue(mockResetToken as unknown as any);
-      mockPrisma.user.update.mockResolvedValue({} as unknown as any);
-      mockPrisma.passwordResetToken.delete.mockResolvedValue({} as unknown as any);
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValue(
+        mockResetToken as unknown as PasswordResetToken,
+      );
+      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.passwordResetToken.deleteMany.mockResolvedValue({ count: 1 });
+      mockPrisma.$transaction.mockImplementation(
+        async (cb: (prisma: unknown) => Promise<unknown>) => await cb(mockPrisma),
+      );
 
       await service.resetPassword('raw-token', 'new-password123');
 
-      expect(prisma.user.update).toHaveBeenCalled();
-      expect(prisma.passwordResetToken.delete).toHaveBeenCalledWith({
-        where: { id: 'token-uuid' },
+      expect(mockPrisma.user.updateMany).toHaveBeenCalled();
+      expect(mockPrisma.passwordResetToken.deleteMany).toHaveBeenCalledWith({
+        where: { user: { email: mockUser.email } },
       });
+      expect(mockAuditLogService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'PASSWORD_RESET_MASSIVE',
+          entity: 'User',
+          entityId: mockUser.email,
+        }),
+      );
     });
 
     it('should throw BadRequestException if token is invalid', async () => {
@@ -538,8 +809,10 @@ describe('AuthService', () => {
         expiresAt: new Date(Date.now() - 3600000), // 1h ago
         user: mockUser,
       };
-      mockPrisma.passwordResetToken.findUnique.mockResolvedValue(mockResetToken as unknown as any);
-      mockPrisma.passwordResetToken.delete.mockResolvedValue({} as unknown as any);
+      mockPrisma.passwordResetToken.findUnique.mockResolvedValue(
+        mockResetToken as unknown as PasswordResetToken,
+      );
+      mockPrisma.passwordResetToken.delete.mockResolvedValue({} as unknown as PasswordResetToken);
 
       await expect(service.resetPassword('token', 'pass')).rejects.toThrow();
       expect(prisma.passwordResetToken.delete).toHaveBeenCalledWith({
@@ -555,7 +828,7 @@ describe('AuthService', () => {
         tenant: { ...mockUser.tenant, mfaRequired: true },
       };
 
-      const result = await service.login(userWithMfaTenant as any);
+      const result = await service.login(userWithMfaTenant as unknown as User);
 
       expect(result).toMatchObject({
         message: 'MFA_REQUIRED',

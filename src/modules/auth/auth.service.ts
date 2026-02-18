@@ -24,7 +24,21 @@ export type JwtPayload = {
   status: string;
 };
 
-export type LoginResult = { access_token: string } | { message: string; mfaToken: string };
+/** JWT final token (single tenant or after tenant selection). */
+export type LoginResultJwt = { access_token: string };
+
+/** MFA required before issuing JWT. */
+export type LoginResultMfa = { message: string; mfaToken: string };
+
+/** Multi-tenant: user must select tenant; tempToken used to complete flow. */
+export type LoginResultTenantSelection = {
+  tenants: Array<{ id: string; name: string; slug: string }>;
+  tempToken: string;
+};
+
+export type LoginResult = LoginResultJwt | LoginResultMfa | LoginResultTenantSelection;
+
+import { AuditLogService } from '@/modules/audit/audit-log.service';
 
 @Injectable()
 export class AuthService {
@@ -34,6 +48,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
     private readonly mailService: MailService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<User | null> {
@@ -58,8 +73,162 @@ export class AuthService {
   }
 
   /**
+   * Finds all users (across tenants) matching email and password.
+   * Returns users with ACTIVE/PENDING status whose tenant is ACTIVE and not deleted.
+   */
+  async validateUserForTenants(
+    email: string,
+    password: string,
+  ): Promise<Array<User & { tenant: Tenant }>> {
+    const users = await this.prisma.user.findMany({
+      where: {
+        email,
+        deletedAt: null,
+        password: { not: null },
+        status: { in: ['ACTIVE', 'PENDING'] },
+        tenant: {
+          deletedAt: null,
+          status: 'ACTIVE',
+        },
+      },
+      include: { tenant: true },
+    });
+
+    const matching: Array<User & { tenant: Tenant }> = [];
+    for (const u of users) {
+      if (u.password && (await bcrypt.compare(password, u.password))) {
+        matching.push(u);
+      }
+    }
+    return matching;
+  }
+
+  /**
+   * Entry point for login: validates credentials and returns either
+   * JWT, MFA_REQUIRED, or tenant selection (if user belongs to multiple tenants).
+   */
+  async attemptLogin(
+    email: string,
+    password: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<LoginResult> {
+    const users = await this.validateUserForTenants(email, password);
+    if (users.length === 0) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (users.length === 1) {
+      return this.login(users[0], ip, userAgent);
+    }
+
+    // Multi-tenant: return tenant list + tempToken
+    return this.createTenantSelectionResponse(users);
+  }
+
+  /**
+   * Creates tempToken (JWT 5 min) and stores tenant-user mapping in Redis.
+   * tempToken payload: { sub: sessionId, type: 'tenant_selection' }.
+   */
+  private createTenantSelectionResponse(
+    users: Array<User & { tenant: Tenant }>,
+  ): LoginResultTenantSelection {
+    const sessionId = crypto.randomUUID();
+    const tenantUsers = users.map((u) => ({
+      userId: u.id,
+      tenantId: u.tenantId,
+      tenantName: u.tenant.name,
+      tenantSlug: u.tenant.slug,
+    }));
+
+    const redisKey = `tenant_selection:${sessionId}`;
+    this.redisService.set(redisKey, JSON.stringify(tenantUsers), 300); // 5 min TTL
+
+    const tempToken = this.jwtService.sign(
+      { sub: sessionId, type: 'tenant_selection' },
+      { expiresIn: '5m' },
+    );
+
+    return {
+      tenants: tenantUsers.map((t) => ({ id: t.tenantId, name: t.tenantName, slug: t.tenantSlug })),
+      tempToken,
+    };
+  }
+
+  /**
+   * Exchanges tempToken + tenantId for final JWT.
+   * Verifies that the userId (from session) belongs to the selected tenantId.
+   */
+  async selectTenant(
+    tempToken: string,
+    tenantId: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<LoginResultJwt | LoginResultMfa> {
+    let payload: { sub: string; type?: string };
+    try {
+      payload = this.jwtService.verify<{ sub: string; type?: string }>(tempToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired temp token');
+    }
+
+    if (payload.type !== 'tenant_selection') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    const sessionId = payload.sub;
+    const redisKey = `tenant_selection:${sessionId}`;
+    const data = await this.redisService.get(redisKey);
+
+    if (!data) {
+      throw new UnauthorizedException('Temp token expired or already used');
+    }
+
+    const tenantUsers: Array<{ userId: string; tenantId: string }> = JSON.parse(data);
+    const selected = tenantUsers.find((t) => t.tenantId === tenantId);
+
+    if (!selected) {
+      throw new UnauthorizedException('Tenant not in your available tenants');
+    }
+
+    // Verify in DB that user exists and belongs to tenant
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id: selected.userId,
+        tenantId: selected.tenantId,
+        deletedAt: null,
+      },
+      include: { tenant: true },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User-tenant association no longer valid');
+    }
+
+    if (
+      !['ACTIVE', 'PENDING'].includes(user.status) ||
+      user.tenant.deletedAt ||
+      user.tenant.status !== 'ACTIVE'
+    ) {
+      throw new UnauthorizedException('Tenant or user is not active');
+    }
+
+    await this.redisService.del(redisKey); // One-time use
+
+    // Single user: login returns JWT or MFA, never tenant selection
+    return this.login(user, ip, userAgent) as Promise<LoginResultJwt | LoginResultMfa>;
+  }
+
+  /**
    * Universal method to process social profiles (Google, GitHub, etc.)
-   * Handles linking to existing accounts by email and tenantId, or creating new ones.
+   * Uses Account table as source of truth for OAuth identities.
+   * Implements Account Linking: links social identity to existing users by email.
+   * Returns LoginResult: JWT, MFA_REQUIRED, or tenant selection (multi-tenant).
+   *
+   * Caso 3 - contextTenantSlug: Registro automático en Tenant específico vía URL/Contexto.
+   * - Usuario NO existe + NO contextTenantSlug → UnauthorizedException
+   * - Usuario NO existe + HAY contextTenantSlug → Crear User + Account en ese tenant
+   * - Usuario EXISTE + HAY contextTenantSlug → Asociar a tenant si no es miembro, o login normal
    */
   async processSocialProfile(
     profile: {
@@ -68,7 +237,10 @@ export class AuthService {
       displayName?: string;
     },
     provider: string,
-  ): Promise<User> {
+    contextTenantSlug?: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<LoginResult> {
     const emailData = profile.emails?.[0];
     const email = emailData?.value;
 
@@ -80,91 +252,182 @@ export class AuthService {
       throw new UnauthorizedException(`${provider} email is not verified`);
     }
 
-    // 1. Step 1: Search in Account table if a record exists with provider and providerAccountId
-    const existingAccount = await this.prisma.account.findUnique({
-      where: {
-        provider_providerAccountId: {
-          provider,
-          providerAccountId: profile.id,
-        },
-      },
+    // 1. Búsqueda de Identidad: Account por provider + providerAccountId (sub del perfil social)
+    const existingAccounts = await this.prisma.account.findMany({
+      where: { provider, providerAccountId: profile.id },
       include: { user: { include: { tenant: true } } },
     });
 
-    // Step 2: If it exists, return the associated User
-    if (existingAccount) {
-      const user = existingAccount.user;
-      if (!['ACTIVE', 'PENDING'].includes(user.status)) {
-        throw new UnauthorizedException('User account is not active');
-      }
-      if (user.tenant.deletedAt || user.tenant.status !== 'ACTIVE') {
-        throw new UnauthorizedException('Tenant is not active or deleted');
-      }
-      return user;
+    const eligibleUsers = existingAccounts
+      .map((a) => a.user)
+      .filter(
+        (u) =>
+          ['ACTIVE', 'PENDING'].includes(u.status) &&
+          !u.tenant.deletedAt &&
+          u.tenant.status === 'ACTIVE',
+      );
+
+    if (existingAccounts.length > 0 && eligibleUsers.length === 0) {
+      throw new UnauthorizedException('User account is not active');
     }
 
-    // Step 3: If Account does not exist, search in User table by email and tenantId
-    const defaultTenantId = this.configService.getOrThrow<string>('OAUTH_DEFAULT_TENANT_ID');
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { id: defaultTenantId, deletedAt: null },
+    if (eligibleUsers.length === 1) {
+      return this.login(eligibleUsers[0], ip, userAgent);
+    }
+
+    if (eligibleUsers.length > 1) {
+      return this.createTenantSelectionResponse(eligibleUsers);
+    }
+
+    // 2. Account Linking por Email: no existe Account, buscar User por email
+    const usersByEmail = await this.prisma.user.findMany({
+      where: {
+        email,
+        deletedAt: null,
+        status: { in: ['ACTIVE', 'PENDING'] },
+        tenant: {
+          deletedAt: null,
+          status: 'ACTIVE',
+        },
+      },
+      include: { tenant: true, accounts: true },
     });
 
-    if (!tenant || tenant.status !== 'ACTIVE') {
-      throw new Error(
-        `OAUTH_DEFAULT_TENANT_ID (${defaultTenantId}) does not exist, is deleted or is not ACTIVE`,
+    const usersToLink = usersByEmail.filter(
+      (u) => !(u.accounts ?? []).some((a) => a.provider === provider),
+    );
+
+    if (usersByEmail.length > 0 && usersToLink.length === 0) {
+      throw new UnauthorizedException(
+        `This email is already linked to a different ${provider} account. Please sign in with that account.`,
       );
     }
 
-    // Rule 2: Verify in Tenant model if provider is included in enabledAuthProviders
+    // 2a. Usuario EXISTE + contextTenantSlug: verificar membresía y asociar si aplica
+    if (contextTenantSlug && usersToLink.length > 0) {
+      const contextTenant = await this.prisma.tenant.findFirst({
+        where: { slug: contextTenantSlug, deletedAt: null, status: 'ACTIVE' },
+      });
+      if (!contextTenant) {
+        throw new NotFoundException(`Tenant with slug "${contextTenantSlug}" not found`);
+      }
+      const userInContextTenant = usersToLink.find((u) => u.tenantId === contextTenant.id);
+      if (userInContextTenant) {
+        await this.prisma.account.create({
+          data: {
+            userId: userInContextTenant.id,
+            provider,
+            providerAccountId: profile.id,
+          },
+        });
+        return this.login(userInContextTenant, ip, userAgent);
+      }
+      // Usuario existe en otros tenants pero NO en contextTenant: crear User en contextTenant + link a todos
+      const newUserInTenant = await this.createUserWithAccountInTenant(
+        email,
+        provider,
+        profile.id,
+        contextTenant.id,
+      );
+      await this.prisma.account.createMany({
+        data: usersToLink.map((u) => ({
+          userId: u.id,
+          provider,
+          providerAccountId: profile.id,
+        })),
+        skipDuplicates: true,
+      });
+      const allUsersForEmail = [...usersToLink, newUserInTenant];
+      return this.createTenantSelectionResponse(allUsersForEmail);
+    }
+
+    if (usersToLink.length === 1) {
+      await this.prisma.account.create({
+        data: {
+          userId: usersToLink[0].id,
+          provider,
+          providerAccountId: profile.id,
+        },
+      });
+      return this.login(usersToLink[0], ip, userAgent);
+    }
+
+    if (usersToLink.length > 1) {
+      await this.prisma.account.createMany({
+        data: usersToLink.map((u) => ({
+          userId: u.id,
+          provider,
+          providerAccountId: profile.id,
+        })),
+        skipDuplicates: true,
+      });
+      return this.createTenantSelectionResponse(usersToLink);
+    }
+
+    // 3. New User: sin Account ni User por email
+    if (!contextTenantSlug) {
+      throw new UnauthorizedException(
+        'Sign up requires a tenant context. Please use a tenant-specific sign-in URL.',
+      );
+    }
+
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { slug: contextTenantSlug, deletedAt: null, status: 'ACTIVE' },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with slug "${contextTenantSlug}" not found`);
+    }
+
     if (!tenant.enabledAuthProviders.includes(provider)) {
       throw new UnauthorizedException(
         `Authentication provider ${provider} is not enabled for this tenant`,
       );
     }
 
-    const existingUser = await this.prisma.user.findFirst({
-      where: { email, tenantId: defaultTenantId, deletedAt: null },
-      include: { tenant: true },
-    });
+    const newUser = await this.createUserWithAccountInTenant(
+      email,
+      provider,
+      profile.id,
+      tenant.id,
+    );
 
-    if (existingUser) {
-      // Rule 1: Link social identity to existing account if user exists
-      if (!['ACTIVE', 'PENDING'].includes(existingUser.status)) {
-        throw new UnauthorizedException('User account is not active');
-      }
+    return this.login(newUser, ip, userAgent);
+  }
 
-      await this.prisma.account.create({
-        data: {
-          userId: existingUser.id,
-          provider,
-          providerAccountId: profile.id,
-        },
-      });
-      return existingUser;
-    }
-
-    // Rule 1: Create User first (with password: null) and then its Account if user does not exist
-    const newUser = await this.prisma.user.create({
+  /**
+   * Creates a new User in the given tenant with Role.USER and links the OAuth Account.
+   */
+  private async createUserWithAccountInTenant(
+    email: string,
+    provider: string,
+    providerAccountId: string,
+    tenantId: string,
+  ) {
+    return this.prisma.user.create({
       data: {
         email,
         password: null,
         role: 'USER',
-        tenantId: defaultTenantId,
+        status: 'ACTIVE',
+        tenantId,
         emailVerified: true,
         accounts: {
           create: {
             provider,
-            providerAccountId: profile.id,
+            providerAccountId,
           },
         },
       },
       include: { tenant: true },
     });
-
-    return newUser;
   }
 
-  async login(user: User & { tenant?: Tenant | null }): Promise<LoginResult> {
+  async login(
+    user: User & { tenant?: Tenant | null },
+    ip?: string,
+    userAgent?: string,
+  ): Promise<LoginResult> {
     const tenant =
       user.tenant || (await this.prisma.tenant.findUnique({ where: { id: user.tenantId } }));
 
@@ -173,7 +436,6 @@ export class AuthService {
 
     if (isMfaRequired) {
       // If MFA is required but not configured, we still issue the mfaToken
-      // The frontend will decide if it shows verification or setup based on user state
       const mfaToken = this.createMfaToken(user);
       return {
         message: 'MFA_REQUIRED',
@@ -181,10 +443,10 @@ export class AuthService {
       };
     }
 
-    return this.loginSuccess(user);
+    return this.loginSuccess(user, ip, userAgent);
   }
 
-  private loginSuccess(user: User) {
+  private async loginSuccess(user: User, ip?: string, userAgent?: string) {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -192,10 +454,26 @@ export class AuthService {
       tenantId: user.tenantId,
       status: user.status,
     };
+
     const access_token = this.jwtService.sign(payload, {
       expiresIn: this.configService.get<string>('JWT_EXPIRES_IN', '7d'),
     });
+
+    // Record login history
+    await this.recordLoginHistory(user.id, user.tenantId, ip, userAgent);
+
     return { access_token };
+  }
+
+  async recordLoginHistory(userId: string, tenantId: string, ip?: string, userAgent?: string) {
+    await this.prisma.loginHistory.create({
+      data: {
+        userId,
+        tenantId,
+        ip,
+        userAgent,
+      },
+    });
   }
 
   createMfaToken(user: User): string {
@@ -214,7 +492,12 @@ export class AuthService {
     });
   }
 
-  async verifyMfa(userId: string, code: string): Promise<{ access_token: string }> {
+  async verifyMfa(
+    userId: string,
+    code: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<{ access_token: string }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { tenant: true },
@@ -245,7 +528,7 @@ export class AuthService {
 
     // Success: clear attempts and login
     await this.redisService.del(throttleKey);
-    return this.loginSuccess(user);
+    return this.loginSuccess(user, ip, userAgent);
   }
 
   /** URL to redirect after OAuth success (SPA); undefined = return JSON. */
@@ -286,23 +569,31 @@ export class AuthService {
     }
   }
 
-  async generateOAuthCode(user: User): Promise<string> {
+  /**
+   * Builds redirect URL for OAuth callback.
+   * - JWT/MFA: stores result in Redis, returns URL with code
+   * - Tenant selection: returns URL with tempToken and tenants
+   */
+  async buildOAuthRedirectUrl(loginResult: LoginResult): Promise<string> {
+    const baseUrl = this.getOAuthSuccessRedirectUrl();
+    if (!baseUrl) return '';
+
+    const url = new URL(baseUrl);
+
+    if ('tenants' in loginResult && 'tempToken' in loginResult) {
+      url.searchParams.set('tempToken', loginResult.tempToken);
+      url.searchParams.set('tenants', JSON.stringify(loginResult.tenants));
+      return url.toString();
+    }
+
     const code = randomBytes(32).toString('hex');
     const expiresIn = this.configService.get<number>('OAUTH_CODE_EXPIRES_IN', 60);
-
-    const data = JSON.stringify({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      tenantId: user.tenantId,
-      status: user.status,
-    });
-
-    await this.redisService.set(`oauth_code:${code}`, data, expiresIn);
-    return code;
+    await this.redisService.set(`oauth_code:${code}`, JSON.stringify(loginResult), expiresIn);
+    url.searchParams.set('code', code);
+    return url.toString();
   }
 
-  async exchangeOAuthCode(code: string): Promise<LoginResult> {
+  async exchangeOAuthCode(code: string, ip?: string, userAgent?: string): Promise<LoginResult> {
     const key = `oauth_code:${code}`;
     const data = await this.redisService.get(key);
 
@@ -312,17 +603,21 @@ export class AuthService {
 
     await this.redisService.del(key);
 
-    const userPayload = JSON.parse(data);
-    const user = await this.prisma.user.findUnique({
-      where: { id: userPayload.userId },
-      include: { tenant: true },
-    });
+    const parsed = JSON.parse(data) as LoginResult;
 
-    if (!user) {
-      throw new UnauthorizedException('User not found');
+    if ('access_token' in parsed) return parsed;
+    if ('message' in parsed && 'mfaToken' in parsed) return parsed;
+
+    const userPayload = parsed as { userId?: string };
+    if (userPayload.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userPayload.userId },
+        include: { tenant: true },
+      });
+      if (user) return this.login(user, ip, userAgent);
     }
 
-    return this.login(user); // This will handle MFA challenge if needed
+    throw new UnauthorizedException('Invalid OAuth code payload');
   }
 
   /**
@@ -330,7 +625,12 @@ export class AuthService {
    * Validates that the user (by email) exists in the target tenant and is ACTIVE/PENDING.
    * Also validates that the target tenant is ACTIVE and not deleted.
    */
-  async switchTenant(userId: string, targetTenantId: string): Promise<LoginResult> {
+  async switchTenant(
+    userId: string,
+    targetTenantId: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<LoginResult> {
     // 1. Get current user's email
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -362,10 +662,10 @@ export class AuthService {
     }
 
     // 4. Generate new token for the target user record
-    return this.login(targetUser);
+    return this.login(targetUser, ip, userAgent);
   }
 
-  async forgotPassword(email: string): Promise<void> {
+  async forgotPassword(email: string): Promise<{ originalToken?: string }> {
     const user = await this.prisma.user.findFirst({
       where: { email, deletedAt: null },
     });
@@ -381,8 +681,8 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 1);
 
-    // Save token to DB (upsert if you want only one active token, or just create)
-    // We'll just create a new one, old ones will expire or be ignored
+    // Save token to DB
+    // We save it for the first user found; resetPassword will use email to update all
     await this.prisma.passwordResetToken.create({
       data: {
         token: hashedToken,
@@ -393,6 +693,10 @@ export class AuthService {
 
     // Send email
     await this.mailService.sendResetPasswordEmail(user.email, token);
+
+    return {
+      originalToken: process.env.NODE_ENV !== 'production' ? token : undefined,
+    };
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
@@ -413,16 +717,30 @@ export class AuthService {
       throw new BadRequestException('Token has expired');
     }
 
-    // Update password
+    // Update password for ALL user records with this email (Global Identity)
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.prisma.user.update({
-      where: { id: resetToken.userId },
-      data: { password: hashedPassword },
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Update all users sharing the same email
+      await tx.user.updateMany({
+        where: { email: resetToken.user.email },
+        data: { password: hashedPassword },
+      });
+
+      // 2. Delete ALL recovery tokens for this email to prevent reuse
+      await tx.passwordResetToken.deleteMany({
+        where: { user: { email: resetToken.user.email } },
+      });
     });
 
-    // Invalidate/Delete the token
-    await this.prisma.passwordResetToken.delete({
-      where: { id: resetToken.id },
+    // 3. Log the password reset
+    await this.auditLogService.create({
+      action: 'USER_PASSWORD_RESET',
+      entity: 'User',
+      entityId: resetToken.userId,
+      payload: { email: resetToken.user.email, method: 'token_reset' },
+      userId: 'SYSTEM',
+      tenantId: null, // Affects all tenants
     });
   }
 }
