@@ -1,22 +1,24 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { RolesGuard } from '@/common/guards/roles.guard';
-import { PrismaService } from '@/database/prisma.service';
+import { MeResponseDto } from '@/modules/auth/dto/me-response.dto';
 import { EmailLogResponseDto } from './dto/email-log-response.dto';
+import { EmailLogService } from './email-log.service';
 
 @ApiTags('Admin / Email Logs')
 @Controller('admin/email-logs')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.SUPER_ADMIN)
+@Roles(Role.SUPER_ADMIN, Role.ADMIN)
 @ApiBearerAuth('BearerAuth')
 export class EmailLogsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly emailLogService: EmailLogService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all email logs (Super Admin only)' })
+  @ApiOperation({ summary: 'Get all email logs (Admin/Super Admin only)' })
   @ApiResponse({
     status: 200,
     description: 'List of email logs',
@@ -24,16 +26,7 @@ export class EmailLogsController {
     isArray: true,
   })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async findAll(): Promise<EmailLogResponseDto[]> {
-    const logs = await this.prisma.emailLog.findMany({
-      orderBy: { sentAt: 'desc' },
-      take: 100,
-    });
-
-    return logs.map((log) => ({
-      ...log,
-      errorMessage: log.errorMessage ?? undefined,
-      tenantId: log.tenantId ?? undefined,
-    }));
+  async findAll(@CurrentUser() user: MeResponseDto): Promise<EmailLogResponseDto[]> {
+    return this.emailLogService.findAll(user);
   }
 }

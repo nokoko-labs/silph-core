@@ -1,13 +1,17 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EmailLogService } from './email-log.service';
+import { EmailLogsController } from './email-logs.controller';
 import { MailService } from './mail.service';
 import { ResendProvider } from './providers/resend.provider';
 import { SmtpProvider } from './providers/smtp.provider';
 
 @Global()
 @Module({
+  controllers: [EmailLogsController],
   providers: [
     MailService,
+    EmailLogService,
     {
       provide: 'EmailProvider',
       useFactory: (configService: ConfigService) => {

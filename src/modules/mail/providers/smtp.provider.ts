@@ -17,10 +17,12 @@ export class SmtpProvider implements EmailProvider {
       host,
       port,
       secure: port === 465,
-      auth: {
-        user,
-        pass,
-      },
+      ...(user && {
+        auth: {
+          user,
+          pass,
+        },
+      }),
     });
   }
 
