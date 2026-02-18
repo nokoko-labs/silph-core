@@ -18,7 +18,7 @@ async function main() {
       name: 'Mushroom Kingdom',
       slug: 'mushroom-kingdom',
       status: TenantStatus.ACTIVE,
-      config: { color: 'red', icon: 'mushroom' },
+      config: { public: { theme: { color: 'red', icon: 'mushroom' } }, private: {} },
     },
   });
 
@@ -66,7 +66,7 @@ async function main() {
       name: 'Castle Grayskull',
       slug: 'castle-grayskull',
       status: TenantStatus.ACTIVE,
-      config: { color: 'green', icon: 'skull' },
+      config: { public: { theme: { color: 'green', icon: 'skull' } }, private: {} },
     },
   });
 
@@ -110,72 +110,129 @@ async function main() {
     console.log(`   👤 User created: ${u.name} (${u.email}) - ${u.status}`);
   }
 
-  // --- 3. Hill Valley (Soft Deleted) ---
-  console.log('🚗 Creating Hill Valley (Soft Deleted)...');
-  const hillValley = await prisma.tenant.upsert({
-    where: { slug: 'hill-valley' },
-    update: {
-      deletedAt: new Date('1985-10-26T01:21:00Z'),
-      status: TenantStatus.DELETED,
-    },
+  // --- 4. Nokoko Labs (New Main Tenant) ---
+  console.log('🧪 Creating Nokoko Labs...');
+  const nokokoLabs = await prisma.tenant.upsert({
+    where: { slug: 'nokoko-labs' },
+    update: {},
     create: {
-      name: 'Hill Valley',
-      slug: 'hill-valley',
-      status: TenantStatus.DELETED,
-      deletedAt: new Date('1985-10-26T01:21:00Z'),
-      config: { color: 'blue', icon: 'delorean' },
+      name: 'Nokoko Labs',
+      slug: 'nokoko-labs',
+      status: TenantStatus.ACTIVE,
+      config: { public: { theme: { color: 'purple', icon: 'beaker' } }, private: {} },
     },
   });
 
-  const hillValleyUsers = [
+  const nokokoUsers = [
     {
-      email: 'marty@hillvalley.com',
-      role: Role.ADMIN,
-      status: UserStatus.SUSPENDED,
-      name: 'Marty McFly',
-    },
-    {
-      email: 'doc@hillvalley.com',
-      role: Role.USER,
-      status: UserStatus.SUSPENDED,
-      name: 'Emmet Brown',
-    },
-    {
-      email: 'biff@hillvalley.com',
-      role: Role.USER,
-      status: UserStatus.SUSPENDED,
-      name: 'Biff Tannen',
-    },
-    {
-      email: 'lorraine@hillvalley.com',
-      role: Role.USER,
-      status: UserStatus.DELETED,
-      name: 'Lorraine Baines',
-      deletedAt: faker.date.past(),
-    },
-    {
-      email: 'george@hillvalley.com',
-      role: Role.USER,
-      status: UserStatus.DELETED,
-      name: 'George McFly',
-      deletedAt: faker.date.past(),
+      email: 'admin@nokoko.com',
+      role: Role.SUPER_ADMIN,
+      status: UserStatus.ACTIVE,
+      name: 'Nokoko Super Admin',
     },
   ];
 
-  for (const u of hillValleyUsers) {
+  for (const u of nokokoUsers) {
     await prisma.user.upsert({
-      where: { email_tenantId: { email: u.email, tenantId: hillValley.id } },
+      where: { email_tenantId: { email: u.email, tenantId: nokokoLabs.id } },
       update: {},
       create: {
         email: u.email,
         password,
         role: u.role,
         status: u.status,
-        tenantId: hillValley.id,
-        deletedAt: u.deletedAt || null,
+        tenantId: nokokoLabs.id,
       },
     });
     console.log(`   👤 User created: ${u.name} (${u.email}) - ${u.status}`);
+  }
+
+  // --- 5. ThunderCats Lair ---
+  console.log('🦁 Creating ThunderCats Lair...');
+  const thundercats = await prisma.tenant.upsert({
+    where: { slug: 'thundercats-lair' },
+    update: {},
+    create: {
+      name: 'ThunderCats Lair',
+      slug: 'thundercats-lair',
+      status: TenantStatus.ACTIVE,
+      config: { public: { theme: { color: 'orange', icon: 'lion' } }, private: {} },
+    },
+  });
+
+  // --- 6. Ghostbusters HQ ---
+  console.log('👻 Creating Ghostbusters HQ...');
+  const ghostbusters = await prisma.tenant.upsert({
+    where: { slug: 'ghostbusters-hq' },
+    update: {},
+    create: {
+      name: 'Ghostbusters HQ',
+      slug: 'ghostbusters-hq',
+      status: TenantStatus.ACTIVE,
+      config: { public: { theme: { color: 'yellow', icon: 'ghost' } }, private: {} },
+    },
+  });
+
+  const sharedUsers = [
+    {
+      email: 'matiasgaratortiz@gmail.com',
+      name: 'Matias Garat',
+      tenants: [
+        { id: nokokoLabs.id, role: Role.SUPER_ADMIN, status: UserStatus.ACTIVE },
+        { id: thundercats.id, role: Role.ADMIN, status: UserStatus.ACTIVE },
+        { id: ghostbusters.id, role: Role.USER, status: UserStatus.ACTIVE },
+      ],
+    },
+    {
+      email: 'lion-o@thundercats.org',
+      name: 'Lion-O',
+      tenants: [
+        { id: thundercats.id, role: Role.ADMIN, status: UserStatus.ACTIVE },
+        { id: ghostbusters.id, role: Role.USER, status: UserStatus.ACTIVE },
+      ],
+    },
+    {
+      email: 'cheetara@thundercats.org',
+      name: 'Cheetara',
+      tenants: [
+        { id: thundercats.id, role: Role.USER, status: UserStatus.ACTIVE },
+        { id: ghostbusters.id, role: Role.ADMIN, status: UserStatus.PENDING },
+      ],
+    },
+    {
+      email: 'venkman@ghostbusters.com',
+      name: 'Peter Venkman',
+      tenants: [
+        { id: ghostbusters.id, role: Role.ADMIN, status: UserStatus.ACTIVE },
+        { id: thundercats.id, role: Role.USER, status: UserStatus.SUSPENDED },
+      ],
+    },
+    {
+      email: 'slimer@ghostbusters.com',
+      name: 'Slimer',
+      tenants: [
+        { id: ghostbusters.id, role: Role.USER, status: UserStatus.DELETED, deletedAt: new Date() },
+        { id: mushroomKingdom.id, role: Role.USER, status: UserStatus.ACTIVE },
+      ],
+    },
+  ];
+
+  for (const u of sharedUsers) {
+    for (const t of u.tenants) {
+      await prisma.user.upsert({
+        where: { email_tenantId: { email: u.email, tenantId: t.id } },
+        update: {},
+        create: {
+          email: u.email,
+          password,
+          role: t.role,
+          status: t.status,
+          tenantId: t.id,
+          deletedAt: (t as { deletedAt?: Date }).deletedAt || null,
+        },
+      });
+      console.log(`   👤 User created: ${u.name} (${u.email}) in tenant ${t.id} - ${t.status}`);
+    }
   }
 
   console.log('--- ✅ Seed Completed Successfully ---');

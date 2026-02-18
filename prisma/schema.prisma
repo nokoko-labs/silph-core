@@ -49,9 +49,6 @@ model User {
   id            String     @id @default(uuid())
   email         String
   password      String?    // null for OAuth-only users (e.g. Google)
-  googleId      String?    @unique
-  githubId      String?    @unique
-  provider      String     @default("credentials")
   emailVerified Boolean    @default(false)
   role          Role       @default(USER)
 
@@ -87,12 +84,12 @@ model Account {
   id                String   @id @default(uuid())
   userId            String
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider          String   // e.g., 'google', 'credentials'
+  provider          String   // e.g., 'google', 'github', 'credentials'
   providerAccountId String   // sub for OAuth, email for credentials
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  @@unique([provider, providerAccountId])
+  @@unique([userId, provider])
   @@map("accounts")
 }
 
@@ -114,4 +111,28 @@ model EmailLog {
   createdAt    DateTime    @default(now())
 
   @@map("email_logs")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String   // e.g. 'CREATE_USER', 'UPDATE_TENANT'
+  entity    String   // The affected table or resource
+  entityId  String   // ID of the affected record
+  payload   Json     // Data sent in the request
+  userId    String   // ID of the action author
+  tenantId  String?  // ID of the tenant for isolation
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  tenantId  String
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("login_history")
 }
