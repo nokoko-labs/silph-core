@@ -1,10 +1,8 @@
-import { createZodDto } from 'nestjs-zod';
-import { CreateTenantSchema } from './create-tenant.dto';
+import { PartialType } from '@nestjs/swagger';
+import { CreateTenantDto } from './create-tenant.dto';
 
 /**
  * Schema for updating an existing tenant.
- * Uses a partial version of the CreateTenantSchema.
+ * Uses a partial version of the CreateTenantDto.
  */
-export const UpdateTenantSchema = CreateTenantSchema.partial();
-
-export class UpdateTenantDto extends createZodDto(UpdateTenantSchema) {}
+export class UpdateTenantDto extends PartialType(CreateTenantDto) {}

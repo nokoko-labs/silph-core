@@ -46,6 +46,7 @@ describe('TenantsController', () => {
     findAll: jest.fn().mockResolvedValue([mockTenant]),
     findOne: jest.fn().mockResolvedValue(mockTenant),
     findBySlug: jest.fn().mockResolvedValue(mockTenant),
+    findPublicBySlug: jest.fn().mockResolvedValue(mockTenant),
     update: jest.fn().mockResolvedValue(mockTenant),
     remove: jest.fn().mockResolvedValue(undefined),
   };
@@ -89,11 +90,27 @@ describe('TenantsController', () => {
   });
 
   describe('findOne', () => {
-    it('should return a tenant by id for active admin', async () => {
+    it('should return a tenant by id for active super admin (any id)', async () => {
+      const result = await controller.findOne('other-id', mockSuperAdminUser);
+
+      expect(result).toEqual(mockTenant);
+      expect(service.findOne).toHaveBeenCalledWith('other-id', Role.SUPER_ADMIN);
+    });
+
+    it('should return own tenant by id for active admin', async () => {
       const result = await controller.findOne(mockTenant.id, mockAdminUser);
 
       expect(result).toEqual(mockTenant);
-      expect(service.findOne).toHaveBeenCalledWith(mockTenant.id);
+      expect(service.findOne).toHaveBeenCalledWith(mockTenant.id, Role.ADMIN);
+    });
+
+    it('should forbid admin from getting another tenant by id', async () => {
+      await expect(controller.findOne('other-id', mockAdminUser)).rejects.toThrow(
+        ForbiddenException,
+      );
+      await expect(controller.findOne('other-id', mockAdminUser)).rejects.toThrow(
+        'Access denied: You can only access your own tenant information',
+      );
     });
 
     it('should forbid inactive admin from getting tenant by id', async () => {
@@ -107,22 +124,18 @@ describe('TenantsController', () => {
         new NotFoundException('Tenant with id "bad-id" not found'),
       );
 
-      await expect(controller.findOne('bad-id', mockAdminUser)).rejects.toThrow(NotFoundException);
+      await expect(controller.findOne('bad-id', mockSuperAdminUser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('findBySlug', () => {
-    it('should return a tenant by slug for active admin', async () => {
-      const result = await controller.findBySlug(mockTenant.slug, mockAdminUser);
+    it('should return a public tenant by slug', async () => {
+      const result = await controller.findBySlug(mockTenant.slug);
 
       expect(result).toEqual(mockTenant);
-      expect(service.findBySlug).toHaveBeenCalledWith(mockTenant.slug);
-    });
-
-    it('should forbid inactive admin from getting tenant by slug', async () => {
-      await expect(controller.findBySlug(mockTenant.slug, mockInactiveAdminUser)).rejects.toThrow(
-        ForbiddenException,
-      );
+      expect(service.findPublicBySlug).toHaveBeenCalledWith(mockTenant.slug);
     });
   });
 

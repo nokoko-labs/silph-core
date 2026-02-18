@@ -12,10 +12,10 @@ import {
   Post,
   UseGuards,
   UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
-import { ZodValidationPipe } from 'nestjs-zod';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
@@ -23,7 +23,9 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { OwnershipGuard } from '@/common/guards/ownership.guard';
 import { RolesGuard } from '@/common/guards/roles.guard';
 import { JwtPayload } from '@/modules/auth/auth.service';
+import { AdminTenantResponseDto } from './dto/admin-tenant-response.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { PublicTenantResponseDto } from './dto/public-tenant-response.dto';
 import { TenantResponseDto } from './dto/tenant-response.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
@@ -35,7 +37,7 @@ export class TenantsController {
 
   @Post()
   @Public()
-  @UsePipes(new ZodValidationPipe(CreateTenantDto))
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Create a new tenant (Public)' })
   @ApiBody({
     type: CreateTenantDto,
@@ -75,21 +77,35 @@ export class TenantsController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard, OwnershipGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
-  @ApiOperation({ summary: 'Get tenant by id' })
-  @ApiResponse({ status: 200, description: 'Tenant found', type: TenantResponseDto })
+  @ApiOperation({ summary: 'Get tenant by id (Admin/Super Admin only)' })
+  @ApiResponse({ status: 200, description: 'Tenant found', type: AdminTenantResponseDto })
+  @ApiResponse({ status: 403, description: 'Forbidden - Access denied' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: JwtPayload,
-  ): Promise<TenantResponseDto> {
+  ): Promise<AdminTenantResponseDto> {
     if (user.status !== 'ACTIVE') {
       throw new ForbiddenException('Only active users can access this');
     }
-    return this.tenantsService.findOne(id);
+
+    // Role.ADMIN can only access their own tenant
+    if (user.role === Role.ADMIN && user.tenantId !== id) {
+      throw new ForbiddenException(
+        'Access denied: You can only access your own tenant information',
+      );
+    }
+
+    // Role.SUPER_ADMIN bypasses restricted check (handled by RolesGuard allowing both, but logic here allows any id)
+
+    return this.tenantsService.findOne(
+      id,
+      user.role as Role,
+    ) as unknown as Promise<AdminTenantResponseDto>;
   }
 
   @Get('slug/:slug')
@@ -98,24 +114,18 @@ export class TenantsController {
     summary: 'Get tenant by slug (Public)',
     description: 'Used during login flow to resolve tenant before credentials. No auth required.',
   })
-  @ApiResponse({ status: 200, description: 'Tenant found', type: TenantResponseDto })
+  @ApiResponse({ status: 200, description: 'Tenant found', type: PublicTenantResponseDto })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  async findBySlug(
-    @Param('slug') slug: string,
-    @CurrentUser() user?: JwtPayload,
-  ): Promise<TenantResponseDto> {
-    if (user != null && user.status !== 'ACTIVE') {
-      throw new ForbiddenException('Only active users can access this');
-    }
-    return this.tenantsService.findBySlug(slug);
+  async findBySlug(@Param('slug') slug: string): Promise<PublicTenantResponseDto> {
+    return this.tenantsService.findPublicBySlug(slug);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard, OwnershipGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
-  @UsePipes(new ZodValidationPipe(UpdateTenantDto))
+  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
   @ApiOperation({ summary: 'Update a tenant' })
   @ApiBody({ type: UpdateTenantDto, description: 'Tenant data to update' })
   @ApiResponse({ status: 200, description: 'Tenant updated successfully', type: TenantResponseDto })

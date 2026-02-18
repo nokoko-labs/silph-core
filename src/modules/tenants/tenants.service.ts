@@ -4,9 +4,18 @@ import {
   NotFoundException,
   PreconditionFailedException,
 } from '@nestjs/common';
-import { Prisma, Tenant } from '@prisma/client';
+import { Prisma, Role, Tenant } from '@prisma/client';
 import { PrismaService } from '@/database/prisma.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
+
+type TenantConfig = {
+  public?: Record<string, unknown>;
+  private?: {
+    activeIntegrations?: string[];
+    [key: string]: unknown;
+  };
+};
 
 @Injectable()
 export class TenantsService {
@@ -19,6 +28,7 @@ export class TenantsService {
           name: dto.name,
           slug: dto.slug,
           status: 'ACTIVE',
+          config: (dto.config as unknown as Prisma.InputJsonValue) || Prisma.JsonNull,
         },
       });
     } catch (error) {
@@ -36,14 +46,76 @@ export class TenantsService {
     });
   }
 
-  async findOne(id: string): Promise<Tenant> {
+  async findOne(id: string, role?: Role): Promise<Tenant | Record<string, unknown>> {
     const tenant = await this.prisma.tenant.findUnique({
-      where: { id, deletedAt: null },
+      where: { id },
     });
-    if (!tenant) {
+
+    if (!tenant || tenant.status === 'DELETED') {
       throw new NotFoundException(`Tenant with id "${id}" not found`);
     }
+
+    // Return full tenant for internal use if no role is provided
+    if (!role) return tenant;
+
+    const config = (tenant.config as unknown as TenantConfig) || {};
+
+    if (role === 'SUPER_ADMIN') {
+      return {
+        ...tenant,
+        config: {
+          public: config.public || {},
+          private: {
+            ...config.private,
+            activeIntegrations: config.private?.activeIntegrations || [],
+          },
+        },
+      };
+    }
+
+    if (role === 'ADMIN') {
+      return {
+        ...tenant,
+        config: {
+          public: config.public || {},
+          private: {
+            activeIntegrations: config.private?.activeIntegrations || [],
+          },
+        },
+      };
+    }
+
     return tenant;
+  }
+
+  async findPublicBySlug(slug: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: {
+        slug,
+        status: 'ACTIVE',
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        enabledAuthProviders: true,
+        config: true,
+      },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException(`Tenant with slug "${slug}" not found or is not active`);
+    }
+
+    // Explicitly select only the 'public' key from config
+    const config = tenant.config as unknown as TenantConfig;
+    return {
+      ...tenant,
+      config: {
+        public: config?.public || {},
+      },
+    };
   }
 
   async findBySlug(slug: string): Promise<Tenant> {
@@ -56,12 +128,15 @@ export class TenantsService {
     return tenant;
   }
 
-  async update(id: string, dto: Prisma.TenantUpdateInput): Promise<Tenant> {
+  async update(id: string, dto: UpdateTenantDto): Promise<Tenant> {
     await this.findOne(id); // Ensure tenant exists
     try {
       return await this.prisma.tenant.update({
         where: { id },
-        data: dto,
+        data: {
+          ...dto,
+          config: dto.config ? (dto.config as unknown as Prisma.InputJsonValue) : undefined,
+        },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {

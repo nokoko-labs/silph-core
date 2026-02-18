@@ -54,7 +54,7 @@ describe('TenantsService', () => {
 
       expect(result).toEqual(mockTenant);
       expect(prisma.tenant.create).toHaveBeenCalledWith({
-        data: { name: dto.name, slug: dto.slug, status: 'ACTIVE' },
+        data: { name: dto.name, slug: dto.slug, status: 'ACTIVE', config: null },
       });
     });
 
@@ -87,8 +87,43 @@ describe('TenantsService', () => {
 
       expect(result).toEqual(mockTenant);
       expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
-        where: { id: mockTenant.id, deletedAt: null },
+        where: { id: mockTenant.id },
       });
+    });
+
+    it('should throw NotFoundException when tenant is marked as DELETED', async () => {
+      prisma.tenant.findUnique.mockResolvedValue({
+        ...mockTenant,
+        status: 'DELETED',
+      });
+
+      await expect(service.findOne(mockTenant.id)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should filter config for ADMIN role', async () => {
+      const tenantWithPrivateConfig = {
+        ...mockTenant,
+        config: {
+          public: { theme: 'blue' },
+          private: {
+            activeIntegrations: ['stripe'],
+            infrastructureKeys: 'secret-key',
+          },
+        },
+      };
+      prisma.tenant.findUnique.mockResolvedValue(tenantWithPrivateConfig);
+
+      const result = await service.findOne(mockTenant.id, 'ADMIN');
+
+      expect(result.config).toEqual({
+        public: { theme: 'blue' },
+        private: { activeIntegrations: ['stripe'] },
+      });
+      // Ensure infrastructureKeys is NOT present
+      expect(
+        (result.config as unknown as Record<string, Record<string, unknown>>).private
+          .infrastructureKeys,
+      ).toBeUndefined();
     });
 
     it('should throw NotFoundException when tenant does not exist', async () => {
@@ -132,7 +167,7 @@ describe('TenantsService', () => {
       expect(result.name).toEqual(updateDto.name);
       expect(prisma.tenant.update).toHaveBeenCalledWith({
         where: { id: mockTenant.id },
-        data: updateDto,
+        data: { ...updateDto, config: undefined },
       });
     });
 
