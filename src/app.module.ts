@@ -7,6 +7,8 @@ import { RedisModule } from '@/cache/redis.module';
 import { ConfigModule } from '@/config/config.module';
 import { DatabaseModule } from '@/database/database.module';
 import { HealthModule } from '@/health/health.module';
+import { AuditInterceptor } from '@/modules/audit/audit.interceptor';
+import { AuditModule } from '@/modules/audit/audit.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { MailModule } from '@/modules/mail/mail.module';
 import { PaymentsModule } from '@/modules/payments/payments.module';
@@ -52,6 +54,7 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
     TenantsModule,
     UsersModule,
     MailModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [
@@ -59,6 +62,10 @@ import { TenantInterceptor } from './common/interceptors/tenant.interceptor';
     {
       provide: APP_INTERCEPTOR,
       useClass: TenantInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
     },
   ],
 })
