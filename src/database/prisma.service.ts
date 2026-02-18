@@ -54,30 +54,45 @@ export class PrismaService
 
               if (operationsWithWhere.includes(operation)) {
                 dynamicArgs.where = dynamicArgs.where || {};
-                dynamicArgs.where.tenantId = tenantId;
+
+                // Only inject tenantId if it's not already explicitly provided.
+                // This allows authorized "cross-tenant" queries (like in switch-tenant)
+                // while maintaining isolation by default.
+                if (dynamicArgs.where.tenantId === undefined) {
+                  dynamicArgs.where.tenantId = tenantId;
+                }
 
                 // For findUnique, we must convert it to findFirst because adding tenantId
                 // might break the unique constraint requirement in the where clause
-                // if they are not part of a compound unique index.
                 if (operation === 'findUnique') {
-                  // biome-ignore lint/suspicious/noExplicitAny: dynamic model access
-                  return (this as any)[model].findFirst(args);
+                  const context = Prisma.getExtensionContext(this);
+                  // biome-ignore lint/suspicious/noExplicitAny: dynamic model delegation
+                  const modelDelegate = (context as any)[
+                    model.charAt(0).toLowerCase() + model.slice(1)
+                  ];
+                  if (modelDelegate?.findFirst) {
+                    return modelDelegate.findFirst(args);
+                  }
                 }
               }
 
-              // For create, ensure tenantId is set
+              // For create, ensure tenantId is set if not provided
               if (operation === 'create') {
                 dynamicArgs.data = dynamicArgs.data || {};
-                dynamicArgs.data.tenantId = tenantId;
+                if (dynamicArgs.data.tenantId === undefined) {
+                  dynamicArgs.data.tenantId = tenantId;
+                }
               }
 
-              // For createMany, ensure tenantId is set for all records
+              // For createMany, ensure tenantId is set for all records if not provided
               if (operation === 'createMany') {
                 if (Array.isArray(dynamicArgs.data)) {
                   for (const item of dynamicArgs.data) {
-                    item.tenantId = tenantId;
+                    if (item.tenantId === undefined) {
+                      item.tenantId = tenantId;
+                    }
                   }
-                } else if (dynamicArgs.data) {
+                } else if (dynamicArgs.data && dynamicArgs.data.tenantId === undefined) {
                   dynamicArgs.data.tenantId = tenantId;
                 }
               }
