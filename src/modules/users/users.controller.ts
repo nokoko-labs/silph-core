@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -24,18 +25,20 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { RolesGuard } from '@/common/guards/roles.guard';
 import { JwtPayload } from '@/modules/auth/auth.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { FindAllUsersQueryDto } from './dto/find-all-users-query.dto';
+import { PaginatedUsersResponseDto } from './dto/paginated-users-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
-@ApiTags('Users')
+@ApiTags('Admin / Users')
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiBody({ type: CreateUserDto })
@@ -56,14 +59,25 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
   @ApiBearerAuth('BearerAuth')
-  @ApiOperation({ summary: 'Get all users' })
-  @ApiResponse({ status: 200, description: 'List of users', type: UserResponseDto, isArray: true })
+  @ApiOperation({
+    summary: 'Get all users (paginated)',
+    description:
+      'Returns users for the current tenant. Supports pagination, filtering by role/status, and sorting.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of users',
+    type: PaginatedUsersResponseDto,
+  })
   @ApiResponse({ status: 403, description: 'Forbidden' })
-  async findAll(@CurrentUser() user: JwtPayload): Promise<UserResponseDto[]> {
+  async findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: FindAllUsersQueryDto,
+  ): Promise<PaginatedUsersResponseDto> {
     if (user.status !== 'ACTIVE') {
       throw new ForbiddenException('Only active admins can list users');
     }
-    return this.usersService.findAll(user.tenantId);
+    return this.usersService.findAll(user.tenantId, query);
   }
 
   @Get(':id')

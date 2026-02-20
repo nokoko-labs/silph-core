@@ -1,8 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { buildPaginationMeta } from '@/common/dto/pagination.dto';
 import { PrismaService } from '@/database/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import type { FindAllUsersQuery } from './dto/find-all-users-query.dto';
+import type { PaginatedUsersResponse } from './dto/paginated-users-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
@@ -29,14 +32,32 @@ export class UsersService {
     }
   }
 
-  async findAll(tenantId: string): Promise<User[]> {
-    return this.prisma.user.findMany({
-      where: {
-        tenantId,
-        deletedAt: null,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  /**
+   * List users with pagination, filtering and sorting.
+   * CRITICAL: Always scoped by tenantId from the authenticated user (multi-tenant security).
+   */
+  async findAll(tenantId: string, query: FindAllUsersQuery): Promise<PaginatedUsersResponse> {
+    const { page, limit, role, status, sortBy, sortOrder } = query;
+
+    const where: Prisma.UserWhereInput = {
+      tenantId,
+      deletedAt: null,
+    };
+    if (role != null) where.role = role;
+    if (status != null) where.status = status;
+
+    const [data, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where,
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    const meta = buildPaginationMeta(total, page, limit);
+    return { data, meta };
   }
 
   async findOne(id: string, tenantId?: string): Promise<User> {

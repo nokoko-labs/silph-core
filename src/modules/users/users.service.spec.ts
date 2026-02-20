@@ -84,15 +84,51 @@ describe('UsersService', () => {
   });
 
   describe('findAll', () => {
+    const defaultQuery = {
+      page: 1,
+      limit: 10,
+      sortBy: 'createdAt' as const,
+      sortOrder: 'desc' as const,
+    };
+
     it('should filter by tenantId and exclude deleted users', async () => {
       mockPrisma.user.findMany.mockResolvedValue([mockUser]);
+      mockPrisma.user.count.mockResolvedValue(1);
 
-      await service.findAll('tenant-id');
+      const result = await service.findAll('tenant-id', defaultQuery);
 
+      expect(result).toEqual({ data: [mockUser], meta: { total: 1, page: 1, lastPage: 1 } });
       expect(prisma.user.findMany).toHaveBeenCalledWith({
         where: { tenantId: 'tenant-id', deletedAt: null },
         orderBy: { createdAt: 'desc' },
+        skip: 0,
+        take: 10,
       });
+      expect(prisma.user.count).toHaveBeenCalledWith({
+        where: { tenantId: 'tenant-id', deletedAt: null },
+      });
+    });
+
+    it('should apply role and status filters when provided', async () => {
+      mockPrisma.user.findMany.mockResolvedValue([]);
+      mockPrisma.user.count.mockResolvedValue(0);
+
+      await service.findAll('tenant-id', {
+        ...defaultQuery,
+        role: Role.ADMIN,
+        status: 'ACTIVE',
+      });
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId: 'tenant-id',
+            deletedAt: null,
+            role: Role.ADMIN,
+            status: 'ACTIVE',
+          },
+        }),
+      );
     });
   });
 
