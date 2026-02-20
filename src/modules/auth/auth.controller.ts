@@ -215,7 +215,7 @@ export class AuthController {
 
     if (redirectUrl) {
       const url = await this.authService.buildOAuthRedirectUrl(result);
-      if (url) return res.redirect(302, url) as Response;
+      if (url) return res.redirect(302, url) as unknown as Response;
     }
 
     return this.sendOAuthResult(result, res);

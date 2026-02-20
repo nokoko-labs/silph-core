@@ -75,10 +75,10 @@ describe('UsersController', () => {
 
   describe('findAll', () => {
     it('should return an array of users for the same tenant (as active admin)', async () => {
-      const result = await controller.findAll(mockAdminPayload);
+      const result = await controller.findAll(mockAdminPayload, {});
 
       expect(result).toEqual([mockUser]);
-      expect(service.findAll).toHaveBeenCalledWith('tenant-id');
+      expect(service.findAll).toHaveBeenCalledWith('tenant-id', {});
     });
 
     it('should throw ForbiddenException if admin is not active', async () => {

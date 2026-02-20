@@ -19,6 +19,11 @@ describe('AuthController', () => {
     updatedAt: new Date(),
   };
 
+  const mockReq = {
+    ip: '127.0.0.1',
+    headers: { 'user-agent': 'jest-test' },
+  };
+
   const mockJwtPayload = {
     sub: mockUser.id,
     email: mockUser.email,
@@ -60,11 +65,17 @@ describe('AuthController', () => {
         json: jest.fn().mockReturnThis(),
       } as unknown as Response;
 
-      await controller.login(loginPayload, res);
+      await controller.login(loginPayload, res, mockReq as any);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ access_token: 'mock-jwt-token' });
-      expect(service.attemptLogin).toHaveBeenCalledWith(loginPayload.email, loginPayload.password);
+      expect(service.attemptLogin).toHaveBeenCalledWith(
+        loginPayload.email,
+        loginPayload.password,
+        undefined,
+        mockReq.ip,
+        mockReq.headers['user-agent'],
+      );
     });
 
     it('should return 202 with MFA_REQUIRED when MFA is needed', async () => {
@@ -78,7 +89,7 @@ describe('AuthController', () => {
         json: jest.fn().mockReturnThis(),
       } as unknown as Response;
 
-      await controller.login(loginPayload, res);
+      await controller.login(loginPayload, res, mockReq as any);
 
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({
@@ -101,7 +112,7 @@ describe('AuthController', () => {
         json: jest.fn().mockReturnThis(),
       } as unknown as Response;
 
-      await controller.login(loginPayload, res);
+      await controller.login(loginPayload, res, mockReq as any);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -122,11 +133,16 @@ describe('AuthController', () => {
         json: jest.fn().mockReturnThis(),
       } as unknown as Response;
 
-      await controller.selectTenant(payload, res);
+      await controller.selectTenant(payload, res, mockReq as any);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ access_token: 'mock-jwt-token' });
-      expect(service.selectTenant).toHaveBeenCalledWith(payload.tempToken, payload.tenantId);
+      expect(service.selectTenant).toHaveBeenCalledWith(
+        payload.tempToken,
+        payload.tenantId,
+        mockReq.ip,
+        mockReq.headers['user-agent'],
+      );
     });
 
     it('should return 202 when MFA is required for selected tenant', async () => {
@@ -140,7 +156,7 @@ describe('AuthController', () => {
         json: jest.fn().mockReturnThis(),
       } as unknown as Response;
 
-      await controller.selectTenant(payload, res);
+      await controller.selectTenant(payload, res, mockReq as any);
 
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({
@@ -193,10 +209,14 @@ describe('AuthController', () => {
     it('should exchange code for JWT', async () => {
       const payload = { code: 'some-code' };
 
-      const result = await controller.exchangeOAuthCode(payload);
+      const result = await controller.exchangeOAuthCode(payload, mockReq as any);
 
       expect(result).toEqual({ access_token: 'mock-jwt-token' });
-      expect(mockAuthService.exchangeOAuthCode).toHaveBeenCalledWith('some-code');
+      expect(mockAuthService.exchangeOAuthCode).toHaveBeenCalledWith(
+        'some-code',
+        mockReq.ip,
+        mockReq.headers['user-agent'],
+      );
     });
   });
 });

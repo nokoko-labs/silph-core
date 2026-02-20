@@ -148,7 +148,7 @@ describe('TenantsController', () => {
       const result = await controller.update(mockTenant.id, dto, mockAdminUser);
 
       expect(result).toEqual(updatedTenant);
-      expect(service.update).toHaveBeenCalledWith(mockTenant.id, dto);
+      expect(service.update).toHaveBeenCalledWith(mockTenant.id, dto, mockAdminUser);
     });
 
     it('should forbid inactive admin from updating tenant', async () => {
