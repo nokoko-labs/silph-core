@@ -14,10 +14,10 @@ import {
   Query,
   UseGuards,
   UsePipes,
-  ValidationPipe,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
+import { ZodValidationPipe } from 'nestjs-zod';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
@@ -27,12 +27,12 @@ import { RolesGuard } from '@/common/guards/roles.guard';
 import { JwtPayload } from '@/modules/auth/auth.service';
 import { AdminTenantResponseDto } from './dto/admin-tenant-response.dto';
 import { CheckSlugResponseDto } from './dto/check-slug-response.dto';
-import { CreateTenantDto } from './dto/create-tenant.dto';
+import { CreateTenantDto, CreateTenantSchema } from './dto/create-tenant.dto';
 import { FindAllTenantsQueryDto } from './dto/find-all-tenants-query.dto';
 import { PaginatedTenantsResponseDto } from './dto/paginated-tenants-response.dto';
 import { PublicTenantResponseDto } from './dto/public-tenant-response.dto';
 import { TenantResponseDto } from './dto/tenant-response.dto';
-import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { UpdateTenantDto, UpdateTenantSchema } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 
 @ApiTags('Tenants')
@@ -42,7 +42,7 @@ export class TenantsController {
 
   @Post()
   @Public()
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @UsePipes(new ZodValidationPipe(CreateTenantSchema))
   @ApiOperation({
     summary: 'Create a new tenant (Public)',
     description:
@@ -164,7 +164,7 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, RolesGuard, OwnershipGuard)
   @Roles(Role.ADMIN, Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
-  @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
+  @UsePipes(new ZodValidationPipe(UpdateTenantSchema))
   @ApiOperation({ summary: 'Update a tenant' })
   @ApiBody({ type: UpdateTenantDto, description: 'Tenant data to update' })
   @ApiResponse({ status: 200, description: 'Tenant updated successfully', type: TenantResponseDto })

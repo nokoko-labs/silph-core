@@ -30,6 +30,12 @@ async function bootstrap() {
     )
     .addTag('api', 'API endpoints')
     .addTag('auth', 'Authentication (JWT)')
+    .addTag('Tenants', 'Tenant management (create, list, update, delete)')
+    .addTag('Admin / Users', 'User CRUD (Admin/Super Admin)')
+    .addTag('Admin / Login History', 'Login history (Admin/Super Admin)')
+    .addTag('Admin / Audit Logs', 'Audit logs (Admin/Super Admin)')
+    .addTag('Admin / Email Logs', 'Email logs (Admin/Super Admin)')
+    .addTag('health', 'Health check')
     .build();
 
   patchNestJsSwagger();

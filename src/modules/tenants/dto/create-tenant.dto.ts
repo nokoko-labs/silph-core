@@ -1,72 +1,54 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import {
-  IsNotEmpty,
-  IsObject,
-  IsOptional,
-  IsString,
-  Matches,
-  MaxLength,
-  MinLength,
-  ValidateNested,
-} from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
+import { withOpenApiExample } from '@/common/zod-openapi';
 
-export class ThemeDto {
-  @ApiProperty({ example: 'red' })
-  @IsString()
-  @IsNotEmpty()
-  color: string;
+/**
+ * Theme subset of tenant public config (OpenAPI + validation).
+ */
+const ThemeSchema = z.object({
+  color: withOpenApiExample(z.string().min(1).describe('Theme color'), 'red'),
+  icon: withOpenApiExample(z.string().min(1).describe('Theme icon'), 'mushroom'),
+});
 
-  @ApiProperty({ example: 'mushroom' })
-  @IsString()
-  @IsNotEmpty()
-  icon: string;
-}
+/**
+ * Public config exposed to clients (theme, etc.).
+ */
+const PublicConfigSchema = z.object({
+  theme: ThemeSchema.describe('Theme settings'),
+});
 
-export class PublicConfigDto {
-  @ApiProperty({ type: ThemeDto })
-  @IsObject()
-  @ValidateNested()
-  @Type(() => ThemeDto)
-  theme: ThemeDto;
-}
-
-export class ConfigDto {
-  @ApiProperty({ type: PublicConfigDto })
-  @IsObject()
-  @ValidateNested()
-  @Type(() => PublicConfigDto)
-  public: PublicConfigDto;
-
-  @ApiPropertyOptional({ type: Object })
-  @IsObject()
-  @IsOptional()
-  private?: Record<string, unknown>;
-}
-
-export class CreateTenantDto {
-  @ApiProperty({ example: 'Acme Corp', description: 'Display name of the tenant' })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(255)
-  name: string;
-
-  @ApiProperty({
-    example: 'acme-corp',
-    description: 'Unique URL-friendly identifier (lowercase, numbers, hyphens only)',
+/**
+ * Full tenant config: public (theme) + optional private (server-only).
+ */
+const ConfigSchema = z
+  .object({
+    public: PublicConfigSchema.describe('Public configuration (e.g. theme)'),
+    private: z.record(z.unknown()).optional().describe('Private configuration (server-only)'),
   })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(100)
-  @Matches(/^[a-z0-9-]+$/, {
-    message: 'slug must contain only lowercase letters, numbers and hyphens (no spaces)',
-  })
-  slug: string;
+  .describe('Tenant configuration');
 
-  @ApiPropertyOptional({ type: ConfigDto })
-  @IsOptional()
-  @IsObject()
-  @ValidateNested()
-  @Type(() => ConfigDto)
-  config?: ConfigDto;
-}
+export const CreateTenantSchema = z.object({
+  name: withOpenApiExample(
+    z.string().min(1).max(255).describe('Display name of the tenant'),
+    'Acme Corp',
+  ),
+  slug: withOpenApiExample(
+    z
+      .string()
+      .min(1)
+      .max(100)
+      .regex(/^[a-z0-9-]+$/, {
+        message: 'slug must contain only lowercase letters, numbers and hyphens (no spaces)',
+      })
+      .describe('Unique URL-friendly identifier (lowercase, numbers, hyphens only)'),
+    'acme-corp',
+  ),
+  config: ConfigSchema.optional().describe('Optional tenant configuration'),
+});
+
+export type CreateTenantPayload = z.infer<typeof CreateTenantSchema>;
+
+/**
+ * DTO for POST /tenants body; validation and OpenAPI from CreateTenantSchema.
+ */
+export class CreateTenantDto extends createZodDto(CreateTenantSchema) {}

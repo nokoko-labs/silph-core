@@ -1,8 +1,15 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateTenantDto } from './create-tenant.dto';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
+import { CreateTenantSchema } from './create-tenant.dto';
 
 /**
- * Schema for updating an existing tenant.
- * Uses a partial version of the CreateTenantDto.
+ * Schema for updating an existing tenant (all fields optional).
  */
-export class UpdateTenantDto extends PartialType(CreateTenantDto) {}
+export const UpdateTenantSchema = CreateTenantSchema.partial();
+
+export type UpdateTenantPayload = z.infer<typeof UpdateTenantSchema>;
+
+/**
+ * DTO for PATCH /tenants/:id body; validation and OpenAPI from UpdateTenantSchema.
+ */
+export class UpdateTenantDto extends createZodDto(UpdateTenantSchema) {}
