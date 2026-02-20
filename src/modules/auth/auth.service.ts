@@ -279,10 +279,9 @@ export class AuthService {
    * Implements Account Linking: links social identity to existing users by email.
    * Returns LoginResult: JWT, MFA_REQUIRED, or tenant selection (multi-tenant).
    *
-   * Caso 3 - contextTenantSlug: Registro automático en Tenant específico vía URL/Contexto.
-   * - Usuario NO existe + NO contextTenantSlug → UnauthorizedException
-   * - Usuario NO existe + HAY contextTenantSlug → Crear User + Account en ese tenant
-   * - Usuario EXISTE + HAY contextTenantSlug → Asociar a tenant si no es miembro, o login normal
+   * Direct-tenant login (contextTenantSlug from OAuth state):
+   * - If contextTenantSlug is provided: validate tenant first; then find user by provider id AND tenant slug → emit finalJwt.
+   * - If no contextTenantSlug and user has multiple tenants → return tempToken + tenant list.
    */
   async processSocialProfile(
     profile: {
@@ -306,6 +305,24 @@ export class AuthService {
       throw new UnauthorizedException(`${provider} email is not verified`);
     }
 
+    // Security: validate tenantSlug early when provided (before processing login)
+    let contextTenant: { id: string; slug: string; enabledAuthProviders: string[] } | null = null;
+    if (contextTenantSlug) {
+      const tenant = await this.prisma.tenant.findFirst({
+        where: { slug: contextTenantSlug, deletedAt: null, status: 'ACTIVE' },
+        select: { id: true, slug: true, enabledAuthProviders: true },
+      });
+      if (!tenant) {
+        throw new NotFoundException(`Tenant with slug "${contextTenantSlug}" not found`);
+      }
+      if (!tenant.enabledAuthProviders.includes(provider)) {
+        throw new UnauthorizedException(
+          `Authentication provider ${provider} is not enabled for this tenant`,
+        );
+      }
+      contextTenant = tenant;
+    }
+
     // 1. Búsqueda de Identidad: Account por provider + providerAccountId (sub del perfil social)
     const existingAccounts = await this.prisma.account.findMany({
       where: { provider, providerAccountId: profile.id },
@@ -323,6 +340,18 @@ export class AuthService {
 
     if (existingAccounts.length > 0 && eligibleUsers.length === 0) {
       throw new UnauthorizedException('User account is not active');
+    }
+
+    // Direct-tenant login: user exists and contextTenantSlug was provided → filter by tenant, emit finalJwt if single match
+    if (contextTenant && eligibleUsers.length > 0) {
+      const slug = contextTenant.slug;
+      const usersInTenant = eligibleUsers.filter((u) => u.tenant.slug === slug);
+      if (usersInTenant.length === 1) {
+        return this.login(usersInTenant[0], ip, userAgent);
+      }
+      if (usersInTenant.length === 0 && eligibleUsers.length > 1) {
+        return this.createTenantSelectionResponse(eligibleUsers);
+      }
     }
 
     if (eligibleUsers.length === 1) {
@@ -357,14 +386,8 @@ export class AuthService {
       );
     }
 
-    // 2a. Usuario EXISTE + contextTenantSlug: verificar membresía y asociar si aplica
-    if (contextTenantSlug && usersToLink.length > 0) {
-      const contextTenant = await this.prisma.tenant.findFirst({
-        where: { slug: contextTenantSlug, deletedAt: null, status: 'ACTIVE' },
-      });
-      if (!contextTenant) {
-        throw new NotFoundException(`Tenant with slug "${contextTenantSlug}" not found`);
-      }
+    // 2a. Usuario EXISTE + contextTenantSlug: verificar membresía y asociar si aplica (contextTenant ya validado arriba)
+    if (contextTenant && usersToLink.length > 0) {
       const userInContextTenant = usersToLink.find((u) => u.tenantId === contextTenant.id);
       if (userInContextTenant) {
         await this.prisma.account.create({
@@ -418,24 +441,10 @@ export class AuthService {
       return this.createTenantSelectionResponse(usersToLink);
     }
 
-    // 3. New User: sin Account ni User por email
-    if (!contextTenantSlug) {
+    // 3. New User: sin Account ni User por email (contextTenant ya validado arriba)
+    if (!contextTenant) {
       throw new UnauthorizedException(
         'Sign up requires a tenant context. Please use a tenant-specific sign-in URL.',
-      );
-    }
-
-    const tenant = await this.prisma.tenant.findFirst({
-      where: { slug: contextTenantSlug, deletedAt: null, status: 'ACTIVE' },
-    });
-
-    if (!tenant) {
-      throw new NotFoundException(`Tenant with slug "${contextTenantSlug}" not found`);
-    }
-
-    if (!tenant.enabledAuthProviders.includes(provider)) {
-      throw new UnauthorizedException(
-        `Authentication provider ${provider} is not enabled for this tenant`,
       );
     }
 
@@ -443,7 +452,7 @@ export class AuthService {
       email,
       provider,
       profile.id,
-      tenant.id,
+      contextTenant.id,
     );
 
     return this.login(newUser, ip, userAgent);

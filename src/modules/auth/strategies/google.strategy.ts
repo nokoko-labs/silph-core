@@ -40,7 +40,10 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   }
 
   async validate(
-    req: RequestWithOAuthContext,
+    req: RequestWithOAuthContext & {
+      ip?: string;
+      headers?: Record<string, string | string[] | undefined>;
+    },
     _accessToken: string,
     _refreshToken: string,
     profile: {
@@ -54,6 +57,18 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       throw new UnauthorizedException('Google login is not configured');
     }
     const contextTenantSlug = req.oauthContextState?.tenantSlug;
-    return this.authService.processSocialProfile(profile, 'google', contextTenantSlug);
+    const userAgent =
+      typeof req.headers?.['user-agent'] === 'string'
+        ? req.headers['user-agent']
+        : Array.isArray(req.headers?.['user-agent'])
+          ? req.headers['user-agent'][0]
+          : undefined;
+    return this.authService.processSocialProfile(
+      profile,
+      'google',
+      contextTenantSlug,
+      req.ip,
+      userAgent,
+    );
   }
 }

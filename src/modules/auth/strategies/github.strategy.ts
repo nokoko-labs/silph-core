@@ -35,7 +35,10 @@ export class GitHubStrategy extends PassportStrategy(Strategy, 'github') {
   }
 
   async validate(
-    req: RequestWithOAuthContext,
+    req: RequestWithOAuthContext & {
+      ip?: string;
+      headers?: Record<string, string | string[] | undefined>;
+    },
     _accessToken: string,
     _refreshToken: string,
     profile: {
@@ -56,6 +59,12 @@ export class GitHubStrategy extends PassportStrategy(Strategy, 'github') {
     }));
 
     const contextTenantSlug = req.oauthContextState?.tenantSlug;
+    const userAgent =
+      typeof req.headers?.['user-agent'] === 'string'
+        ? req.headers['user-agent']
+        : Array.isArray(req.headers?.['user-agent'])
+          ? req.headers['user-agent'][0]
+          : undefined;
     return this.authService.processSocialProfile(
       {
         id: profile.id,
@@ -64,6 +73,8 @@ export class GitHubStrategy extends PassportStrategy(Strategy, 'github') {
       },
       'github',
       contextTenantSlug,
+      req.ip,
+      userAgent,
     );
   }
 }

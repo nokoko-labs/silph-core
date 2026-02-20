@@ -66,13 +66,21 @@ describe('GoogleStrategy', () => {
         mockProfile,
         'google',
         undefined,
+        undefined,
+        undefined,
       );
     });
 
     it('should pass contextTenantSlug from req.oauthContextState to processSocialProfile', async () => {
       mockReq.oauthContextState = { tenantSlug: 'acme' };
       await strategy.validate(mockReq, 'access', 'refresh', mockProfile);
-      expect(authService.processSocialProfile).toHaveBeenCalledWith(mockProfile, 'google', 'acme');
+      expect(authService.processSocialProfile).toHaveBeenCalledWith(
+        mockProfile,
+        'google',
+        'acme',
+        undefined,
+        undefined,
+      );
     });
 
     it('should throw UnauthorizedException when Google is not configured', async () => {

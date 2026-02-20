@@ -24,10 +24,11 @@ import { Request as ExpressRequest, Response } from 'express';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
+import { GitHubAuthGuard } from '@/common/guards/github-auth.guard';
 import { GoogleAuthGuard } from '@/common/guards/google-auth.guard';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { MfaAuthGuard } from '@/common/guards/mfa-auth.guard';
-
+import type { LoginResult } from './auth.service';
 import { AuthService, JwtPayload } from './auth.service';
 import { ForgotPasswordDto, forgotPasswordSchema } from './dto/forgot-password.dto';
 import { LoginDto, loginSchema } from './dto/login.dto';
@@ -37,14 +38,12 @@ import { MfaVerifyDto, mfaVerifySchema } from './dto/mfa-verify.dto';
 import { OauthExchangeDto, oauthExchangeSchema } from './dto/oauth-exchange.dto';
 import { RegisterDto, type RegisterPayload, registerSchema } from './dto/register.dto';
 import { ResetPasswordDto, resetPasswordSchema } from './dto/reset-password.dto';
-
 import {
   SelectTenantDto,
   type SelectTenantPayload,
   selectTenantSchema,
 } from './dto/select-tenant.dto';
 import { TenantSelectionResponseDto } from './dto/tenant-selection-response.dto';
-import { getContextTenantSlug } from './oauth-context.helper';
 
 @ApiTags('auth')
 @ApiExtraModels(LoginResponseDto, TenantSelectionResponseDto)
@@ -150,7 +149,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Redirect to Google OAuth (social login)',
     description:
-      'Accepts optional ?tenantSlug= or x-tenant-slug header for Caso 3 (auto-register in tenant).',
+      'Accepts optional ?slug= or ?tenantSlug= or x-tenant-slug header. Slug is passed via state to callback for direct-tenant login.',
   })
   @ApiResponse({ status: 302, description: 'Redirects to Google consent screen' })
   @ApiResponse({ status: 401, description: 'Google OAuth not configured' })
@@ -172,32 +171,63 @@ export class AuthController {
   @ApiResponse({ status: 302, description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL' })
   @ApiResponse({ status: 401, description: 'Google auth failed or not configured' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  // biome-ignore lint/suspicious/noExplicitAny: req.user from GoogleStrategy is any
-  async googleAuthCallback(@Request() req: any, @Res() res: Response) {
-    const result = await this.authService.processSocialProfile(
-      req.user,
-      'google',
-      // biome-ignore lint/suspicious/noExplicitAny: req needs cast for helper
-      getContextTenantSlug(req as any),
-      req.ip,
-      req.headers['user-agent'] as string,
-    );
+  // biome-ignore lint/suspicious/noExplicitAny: req.user is LoginResult from strategy
+  async googleAuthCallback(@Request() req: any, @Res() res: Response): Promise<Response> {
+    const result = req.user as LoginResult;
+    return this.handleOAuthCallback(result, res) as Promise<Response>;
+  }
 
+  @Get('github')
+  @UseGuards(GitHubAuthGuard)
+  @ApiOperation({
+    summary: 'Redirect to GitHub OAuth (social login)',
+    description:
+      'Accepts optional ?slug= or ?tenantSlug= or x-tenant-slug header. Slug is passed via state to callback for direct-tenant login.',
+  })
+  @ApiResponse({ status: 302, description: 'Redirects to GitHub consent screen' })
+  @ApiResponse({ status: 401, description: 'GitHub OAuth not configured' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  githubAuth() {
+    // Guard redirects to GitHub; no body executed
+  }
+
+  @Get('github/callback')
+  @UseGuards(GitHubAuthGuard)
+  @HttpCode(200)
+  @ApiOperation({ summary: 'GitHub OAuth callback; returns JWT or redirects to frontend' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns JWT if OAUTH_SUCCESS_REDIRECT_URL not set',
+    type: LoginResponseDto,
+  })
+  @ApiResponse({ status: 202, description: 'MFA Required', type: MfaRequiredResponseDto })
+  @ApiResponse({ status: 302, description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL' })
+  @ApiResponse({ status: 401, description: 'GitHub auth failed or not configured' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  // biome-ignore lint/suspicious/noExplicitAny: req.user is LoginResult from strategy
+  async githubAuthCallback(@Request() req: any, @Res() res: Response): Promise<Response> {
+    const result = req.user as LoginResult;
+    return this.handleOAuthCallback(result, res) as Promise<Response>;
+  }
+
+  private async handleOAuthCallback(result: LoginResult, res: Response): Promise<Response> {
     const redirectUrl = this.authService.getOAuthSuccessRedirectUrl();
 
     if (redirectUrl) {
       const url = await this.authService.buildOAuthRedirectUrl(result);
-      if (url) return res.redirect(302, url);
+      if (url) return res.redirect(302, url) as Response;
     }
 
+    return this.sendOAuthResult(result, res);
+  }
+
+  private sendOAuthResult(result: LoginResult, res: Response): Response {
     if ('message' in result && result.message === 'MFA_REQUIRED') {
       return res.status(202).json(result);
     }
-
     if ('tenants' in result && 'tempToken' in result) {
       return res.status(200).json(result);
     }
-
     return res.status(200).json(result);
   }
 
