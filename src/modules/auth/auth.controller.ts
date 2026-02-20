@@ -30,7 +30,7 @@ import { MfaAuthGuard } from '@/common/guards/mfa-auth.guard';
 
 import { AuthService, JwtPayload } from './auth.service';
 import { ForgotPasswordDto, forgotPasswordSchema } from './dto/forgot-password.dto';
-import { LoginDto, type LoginPayload, loginSchema } from './dto/login.dto';
+import { LoginDto, loginSchema } from './dto/login.dto';
 import { LoginResponseDto, MfaRequiredResponseDto } from './dto/login-response.dto';
 import { MeResponseDto } from './dto/me-response.dto';
 import { MfaVerifyDto, mfaVerifySchema } from './dto/mfa-verify.dto';
@@ -58,9 +58,12 @@ export class AuthController {
   @ApiOperation({
     summary: 'Login with email and password',
     description:
-      'Validates credentials. Returns: (1) JWT when single tenant and no MFA, (2) tenant selection when user belongs to multiple tenants, or (3) MFA_REQUIRED when MFA is needed.',
+      'Validates credentials. With optional tenantSlug (Direct Tenant Login): resolves tenant by slug, finds user by email+tenant, validates password and ACTIVE status, then returns JWT or MFA. Without tenantSlug: returns (1) JWT when single tenant and no MFA, (2) tenant selection when user belongs to multiple tenants, or (3) MFA_REQUIRED when MFA is needed.',
   })
-  @ApiBody({ type: LoginDto, description: 'Email and password' })
+  @ApiBody({
+    type: LoginDto,
+    description: 'Email, password, and optional tenantSlug for direct tenant login',
+  })
   @ApiResponse({
     status: 200,
     description: 'JWT access token (single tenant) or tenant selection (multi-tenant)',
@@ -75,12 +78,13 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid input (e.g. invalid email format)' })
   @ApiResponse({ status: 401, description: 'Invalid email or password' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  async login(@Body() payload: LoginPayload, @Res() res: Response, @Request() req: ExpressRequest) {
+  async login(@Body() payload: LoginDto, @Res() res: Response, @Request() req: ExpressRequest) {
     const result = await this.authService.attemptLogin(
-      payload.email,
-      payload.password,
+      String(payload.email),
+      String(payload.password),
+      payload.tenantSlug == null ? undefined : String(payload.tenantSlug),
       req.ip,
-      req.headers['user-agent'],
+      req.headers['user-agent'] as string | undefined,
     );
 
     if ('message' in result && result.message === 'MFA_REQUIRED') {
@@ -242,15 +246,30 @@ export class AuthController {
   @Post('forgot-password')
   @UsePipes(new ZodValidationPipe(forgotPasswordSchema))
   @HttpCode(200)
-  @ApiOperation({ summary: 'Request password reset email' })
-  @ApiBody({ type: ForgotPasswordDto, description: 'User email' })
-  @ApiResponse({ status: 200, description: 'Email sent message' })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @ApiOperation({
+    summary: 'Request password reset email (multi-tenant)',
+    description:
+      'Requires email and tenantSlug. If the user exists in that tenant, sends a reset email. Otherwise returns the same success message (no email) to avoid user enumeration. Returns 404 if the tenant does not exist.',
+  })
+  @ApiBody({
+    type: ForgotPasswordDto,
+    description: 'User email and tenant slug to identify the tenant account',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Always returns this message when tenant exists; email is sent only if user exists in that tenant',
+  })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async forgotPassword(@Body() payload: ForgotPasswordDto) {
-    const result = await this.authService.forgotPassword(payload.email);
+    const result = await this.authService.forgotPassword(
+      String(payload.email),
+      String(payload.tenantSlug),
+    );
     return {
-      message: 'If an account with that email exists, a password reset link has been sent.',
+      message:
+        'If an account with that email exists in this tenant, a password reset link has been sent.',
       ...(result.originalToken ? { _debug: result.originalToken } : {}),
     };
   }

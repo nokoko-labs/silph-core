@@ -16,9 +16,15 @@ export class MailService {
     private readonly cls: ClsService,
   ) {}
 
-  async send(to: string, subject: string, template: string, context: Record<string, unknown> = {}) {
+  async send(
+    to: string,
+    subject: string,
+    template: string,
+    context: Record<string, unknown> = {},
+    tenantIdOverride?: string,
+  ) {
     const providerName = this.provider.getName();
-    const tenantId = this.cls.get<string>('tenantId');
+    const tenantId = tenantIdOverride ?? this.cls.get<string>('tenantId');
 
     try {
       await this.provider.send(to, subject, template, context);
@@ -56,7 +62,7 @@ export class MailService {
     }
   }
 
-  async sendResetPasswordEmail(email: string, token: string) {
+  async sendResetPasswordEmail(email: string, token: string, tenantId?: string) {
     const resetUrl = `${this.configService.get<string>(
       'FRONTEND_URL',
       'http://localhost:3000',
@@ -67,7 +73,7 @@ export class MailService {
 
     try {
       this.logger.log(`Sending reset password email to ${email}`);
-      await this.send(email, subject, html);
+      await this.send(email, subject, html, {}, tenantId);
       return true;
     } catch (error) {
       this.logger.error(`Error sending email to ${email}`, error.stack);

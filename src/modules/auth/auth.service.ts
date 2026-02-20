@@ -107,13 +107,21 @@ export class AuthService {
   /**
    * Entry point for login: validates credentials and returns either
    * JWT, MFA_REQUIRED, or tenant selection (if user belongs to multiple tenants).
+   * When tenantSlug is provided (Direct Tenant Login), resolves tenant by slug,
+   * finds user by composite key (email + tenantId), validates password and ACTIVE status,
+   * then returns JWT or MFA without tenant selection.
    */
   async attemptLogin(
     email: string,
     password: string,
+    tenantSlug?: string,
     ip?: string,
     userAgent?: string,
   ): Promise<LoginResult> {
+    if (tenantSlug) {
+      return this.directTenantLogin(email, password, tenantSlug, ip, userAgent);
+    }
+
     const users = await this.validateUserForTenants(email, password);
     if (users.length === 0) {
       throw new UnauthorizedException('Invalid email or password');
@@ -125,6 +133,51 @@ export class AuthService {
 
     // Multi-tenant: return tenant list + tempToken
     return this.createTenantSelectionResponse(users);
+  }
+
+  /**
+   * Direct Tenant Login: tenantSlug is provided → resolve tenant, find user by email+tenantId,
+   * validate password and ACTIVE status, then issue JWT or MFA.
+   */
+  private async directTenantLogin(
+    email: string,
+    password: string,
+    tenantSlug: string,
+    ip?: string,
+    userAgent?: string,
+  ): Promise<LoginResultJwt | LoginResultMfa> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: tenantSlug },
+    });
+
+    if (!tenant || tenant.deletedAt || tenant.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email_tenantId: { email, tenantId: tenant.id },
+      },
+      include: { tenant: true },
+    });
+
+    if (
+      !user ||
+      !user.password ||
+      user.status !== 'ACTIVE' ||
+      user.deletedAt ||
+      user.tenant.deletedAt ||
+      user.tenant.status !== 'ACTIVE'
+    ) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    return this.login(user, ip, userAgent) as Promise<LoginResultJwt | LoginResultMfa>;
   }
 
   /**
@@ -666,24 +719,39 @@ export class AuthService {
     return this.login(targetUser, ip, userAgent);
   }
 
-  async forgotPassword(email: string): Promise<{ originalToken?: string }> {
-    const user = await this.prisma.user.findFirst({
-      where: { email, deletedAt: null },
+  /**
+   * Multi-tenant forgot password: requires tenantSlug to resolve user by email+tenantId.
+   * If user does not exist in that tenant, returns same success response (no email) to avoid enumeration.
+   */
+  async forgotPassword(email: string, tenantSlug: string): Promise<{ originalToken?: string }> {
+    // Step 1: Resolve tenant by slug
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: tenantSlug },
     });
 
-    if (!user) {
-      throw new NotFoundException('User with this email does not exist');
+    if (!tenant || tenant.deletedAt || tenant.status !== 'ACTIVE') {
+      throw new NotFoundException('Tenant not found');
     }
 
-    // Generate a secure random token
+    // Step 2: Find user by composite key (email + tenantId)
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email_tenantId: { email, tenantId: tenant.id },
+      },
+    });
+
+    // Step 3 & 4: If user exists, create token and send email (EmailLog will get tenantId from MailService)
+    if (!user || user.deletedAt) {
+      return {
+        originalToken: undefined,
+      };
+    }
+
     const token = crypto.randomBytes(32).toString('hex');
-    // Hash the token for storage (using SHA256 for fast lookup vs bcrypt)
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 1);
 
-    // Save token to DB
-    // We save it for the first user found; resetPassword will use email to update all
     await this.prisma.passwordResetToken.create({
       data: {
         token: hashedToken,
@@ -692,16 +760,17 @@ export class AuthService {
       },
     });
 
-    // Send email
-    await this.mailService.sendResetPasswordEmail(user.email, token);
+    await this.mailService.sendResetPasswordEmail(user.email, token, tenant.id);
 
     return {
       originalToken: process.env.NODE_ENV !== 'production' ? token : undefined,
     };
   }
 
+  /**
+   * Resets password for the user linked to the token (single tenant-scoped user).
+   */
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    // Hash the incoming token to compare with DB
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
     const resetToken = await this.prisma.passwordResetToken.findUnique({
@@ -718,30 +787,25 @@ export class AuthService {
       throw new BadRequestException('Token has expired');
     }
 
-    // Update password for ALL user records with this email (Global Identity)
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     await this.prisma.$transaction(async (tx) => {
-      // 1. Update all users sharing the same email
-      await tx.user.updateMany({
-        where: { email: resetToken.user.email },
+      await tx.user.update({
+        where: { id: resetToken.userId },
         data: { password: hashedPassword },
       });
-
-      // 2. Delete ALL recovery tokens for this email to prevent reuse
       await tx.passwordResetToken.deleteMany({
-        where: { user: { email: resetToken.user.email } },
+        where: { userId: resetToken.userId },
       });
     });
 
-    // 3. Log the password reset
     await this.auditLogService.create({
-      action: 'PASSWORD_RESET_MASSIVE',
+      action: 'PASSWORD_RESET',
       entity: 'User',
-      entityId: resetToken.user.email,
+      entityId: resetToken.user.id,
       payload: { email: resetToken.user.email, method: 'token_reset' },
       userId: 'SYSTEM',
-      tenantId: null, // Affects all tenants
+      tenantId: resetToken.user.tenantId,
     });
   }
 

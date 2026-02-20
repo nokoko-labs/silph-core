@@ -81,9 +81,19 @@ describe('AuthService', () => {
     create: jest.fn().mockResolvedValue({}),
   };
 
+  const mockTenant = {
+    id: 'tenant-uuid-1',
+    name: 'Acme',
+    slug: 'acme',
+    status: 'ACTIVE',
+    deletedAt: null as Date | null,
+  };
+
   beforeEach(async () => {
     (bcrypt.compare as jest.Mock).mockClear().mockResolvedValue(true);
     mockPrisma.user.findFirst.mockResolvedValue(mockUser);
+    mockPrisma.tenant.findUnique.mockResolvedValue(mockTenant as unknown as Tenant);
+    mockPrisma.user.findUnique.mockResolvedValue(mockUser as unknown as User);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -731,14 +741,17 @@ describe('AuthService', () => {
   });
 
   describe('forgotPassword', () => {
-    it('should generate token, hash it, save it and send email', async () => {
+    it('should resolve tenant by slug, find user by email+tenantId, create token and send email', async () => {
       mockPrisma.passwordResetToken.create.mockResolvedValue({} as unknown as PasswordResetToken);
 
-      const result = await service.forgotPassword('admin@example.com');
+      const result = await service.forgotPassword('admin@example.com', 'acme');
 
       expect(result).toHaveProperty('originalToken');
-      expect(prisma.user.findFirst).toHaveBeenCalledWith({
-        where: { email: 'admin@example.com', deletedAt: null },
+      expect(prisma.tenant.findUnique).toHaveBeenCalledWith({
+        where: { slug: 'acme' },
+      });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email_tenantId: { email: 'admin@example.com', tenantId: mockTenant.id } },
       });
       expect(prisma.passwordResetToken.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -752,18 +765,31 @@ describe('AuthService', () => {
       expect(mockMailService.sendResetPasswordEmail).toHaveBeenCalledWith(
         mockUser.email,
         expect.any(String),
+        mockTenant.id,
       );
     });
 
-    it('should throw NotFoundException if user not found', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
+    it('should return success without sending email when user does not exist in tenant', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockMailService.sendResetPasswordEmail.mockClear();
 
-      await expect(service.forgotPassword('unknown@example.com')).rejects.toThrow();
+      const result = await service.forgotPassword('unknown@example.com', 'acme');
+
+      expect(result).toEqual({ originalToken: undefined });
+      expect(mockMailService.sendResetPasswordEmail).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException when tenant does not exist', async () => {
+      prisma.tenant.findUnique.mockResolvedValue(null);
+
+      await expect(service.forgotPassword('admin@example.com', 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('resetPassword', () => {
-    it('should reset password and delete token if valid', async () => {
+    it('should reset password for token user and delete tokens for that user', async () => {
       const mockResetToken = {
         id: 'token-uuid',
         token: 'hashed-token',
@@ -774,7 +800,7 @@ describe('AuthService', () => {
       mockPrisma.passwordResetToken.findUnique.mockResolvedValue(
         mockResetToken as unknown as PasswordResetToken,
       );
-      mockPrisma.user.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.user.update.mockResolvedValue(mockUser as unknown as User);
       mockPrisma.passwordResetToken.deleteMany.mockResolvedValue({ count: 1 });
       mockPrisma.$transaction.mockImplementation(
         async (cb: (prisma: unknown) => Promise<unknown>) => await cb(mockPrisma),
@@ -782,15 +808,19 @@ describe('AuthService', () => {
 
       await service.resetPassword('raw-token', 'new-password123');
 
-      expect(mockPrisma.user.updateMany).toHaveBeenCalled();
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { password: 'hashed-password' },
+      });
       expect(mockPrisma.passwordResetToken.deleteMany).toHaveBeenCalledWith({
-        where: { user: { email: mockUser.email } },
+        where: { userId: mockUser.id },
       });
       expect(mockAuditLogService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'PASSWORD_RESET_MASSIVE',
+          action: 'PASSWORD_RESET',
           entity: 'User',
-          entityId: mockUser.email,
+          entityId: mockUser.id,
+          tenantId: mockUser.tenantId,
         }),
       );
     });
