@@ -23,9 +23,11 @@ import {
 import { Request as ExpressRequest, Response } from 'express';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 import { GoogleAuthGuard } from '@/common/guards/google-auth.guard';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { MfaAuthGuard } from '@/common/guards/mfa-auth.guard';
+
 import { AuthService, JwtPayload } from './auth.service';
 import { ForgotPasswordDto, forgotPasswordSchema } from './dto/forgot-password.dto';
 import { LoginDto, type LoginPayload, loginSchema } from './dto/login.dto';
@@ -33,7 +35,9 @@ import { LoginResponseDto, MfaRequiredResponseDto } from './dto/login-response.d
 import { MeResponseDto } from './dto/me-response.dto';
 import { MfaVerifyDto, mfaVerifySchema } from './dto/mfa-verify.dto';
 import { OauthExchangeDto, oauthExchangeSchema } from './dto/oauth-exchange.dto';
+import { RegisterDto, type RegisterPayload, registerSchema } from './dto/register.dto';
 import { ResetPasswordDto, resetPasswordSchema } from './dto/reset-password.dto';
+
 import {
   SelectTenantDto,
   type SelectTenantPayload,
@@ -286,5 +290,34 @@ export class AuthController {
       req.ip,
       req.headers['user-agent'],
     );
+  }
+
+  @Public()
+  @Post('register')
+  @UsePipes(new ZodValidationPipe(registerSchema))
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'Register a new user',
+    description:
+      'Creates a new user. If tenantSlug matches an active tenant, joins as USER. Otherwise, creates a new Tenant and joins as ADMIN.',
+  })
+  @ApiBody({ type: RegisterDto, description: 'User registration data' })
+  @ApiResponse({
+    status: 201,
+    description: 'User registered successfully; returns JWT access token',
+    type: LoginResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid input' })
+  @ApiResponse({ status: 409, description: 'Email already exists' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async register(
+    @Body() payload: RegisterPayload,
+    @Request() req: ExpressRequest,
+  ): Promise<LoginResponseDto> {
+    return (await this.authService.register(
+      payload,
+      req.ip,
+      req.headers['user-agent'],
+    )) as LoginResponseDto;
   }
 }

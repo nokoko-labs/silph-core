@@ -8,13 +8,14 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Tenant, User } from '@prisma/client';
+import { Role, Tenant, User } from '@prisma/client';
 
 import * as bcrypt from 'bcryptjs';
 import { verify } from 'otplib';
 import { RedisService } from '@/cache/redis.service';
 import { PrismaService } from '@/database/prisma.service';
 import { MailService } from '@/modules/mail/mail.service';
+import { RegisterPayload } from './dto/register.dto';
 
 export type JwtPayload = {
   sub: string;
@@ -735,12 +736,77 @@ export class AuthService {
 
     // 3. Log the password reset
     await this.auditLogService.create({
-      action: 'USER_PASSWORD_RESET',
+      action: 'PASSWORD_RESET_MASSIVE',
       entity: 'User',
-      entityId: resetToken.userId,
+      entityId: resetToken.user.email,
       payload: { email: resetToken.user.email, method: 'token_reset' },
       userId: 'SYSTEM',
       tenantId: null, // Affects all tenants
+    });
+  }
+
+  /**
+   * Public user registration.
+   * - If tenantSlug matches an active tenant, joins as USER.
+   * - If no slug or mismatch, creates a basic Tenant and joins as ADMIN.
+   */
+  async register(dto: RegisterPayload, ip?: string, userAgent?: string): Promise<LoginResult> {
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    return await this.prisma.$transaction(async (tx) => {
+      let tenantId: string;
+      let role: Role = 'USER';
+
+      if (dto.tenantSlug) {
+        const existingTenant = await tx.tenant.findFirst({
+          where: { slug: dto.tenantSlug, deletedAt: null, status: 'ACTIVE' },
+        });
+
+        if (existingTenant) {
+          tenantId = existingTenant.id;
+        } else {
+          // If slug provided but not found, create new one with that slug
+          const newTenant = await tx.tenant.create({
+            data: {
+              name: dto.tenantName || `${dto.name}'s Workspace`,
+              slug: dto.tenantSlug,
+              status: 'ACTIVE',
+            },
+          });
+          tenantId = newTenant.id;
+          role = 'ADMIN';
+        }
+      } else {
+        // Solo user: create new tenant with generated slug
+        const baseSlug =
+          dto.tenantName?.toLowerCase().replace(/\s+/g, '-') ||
+          dto.name.toLowerCase().replace(/\s+/g, '-');
+        const finalSlug = `${baseSlug}-${crypto.randomBytes(4).toString('hex')}`;
+
+        const newTenant = await tx.tenant.create({
+          data: {
+            name: dto.tenantName || `${dto.name}'s Workspace`,
+            slug: finalSlug,
+            status: 'ACTIVE',
+          },
+        });
+        tenantId = newTenant.id;
+        role = 'ADMIN';
+      }
+
+      const user = await tx.user.create({
+        data: {
+          email: dto.email,
+          password: hashedPassword,
+          role,
+          status: 'ACTIVE',
+          tenantId,
+          emailVerified: false,
+        },
+      });
+
+      // Record login and return JWT
+      return this.login(user, ip, userAgent);
     });
   }
 }
