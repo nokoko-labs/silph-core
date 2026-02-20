@@ -1,8 +1,10 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { type DeepMockProxy, mockDeep } from 'jest-mock-extended';
 import { PrismaService } from '@/database/prisma.service';
+import type { JwtPayload } from '@/modules/auth/auth.service';
+import type { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 
 function createPrismaP2002Error(): Prisma.PrismaClientKnownRequestError {
@@ -20,11 +22,20 @@ describe('TenantsService', () => {
     id: '123e4567-e89b-12d3-a456-426614174000',
     name: 'Acme Corp',
     slug: 'acme-corp',
-    status: 'ACTIVE',
+    status: 'ACTIVE' as const,
     config: null,
+    mfaRequired: false,
+    enabledAuthProviders: ['password'],
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null as Date | null,
+  };
+
+  const defaultQuery = {
+    page: 1,
+    limit: 10,
+    sortBy: 'createdAt' as const,
+    sortOrder: 'desc' as const,
   };
 
   const mockPrisma = mockDeep<PrismaService>();
@@ -54,7 +65,7 @@ describe('TenantsService', () => {
 
       expect(result).toEqual(mockTenant);
       expect(prisma.tenant.create).toHaveBeenCalledWith({
-        data: { name: dto.name, slug: dto.slug, status: 'ACTIVE', config: null },
+        data: { name: dto.name, slug: dto.slug, status: 'ACTIVE', config: Prisma.JsonNull },
       });
     });
 
@@ -70,14 +81,39 @@ describe('TenantsService', () => {
   });
 
   describe('findAll', () => {
-    it('should return all non-deleted tenants', async () => {
-      const result = await service.findAll();
+    it('should return paginated tenants for SUPER_ADMIN', async () => {
+      mockPrisma.tenant.findMany.mockResolvedValue([mockTenant]);
+      mockPrisma.tenant.count.mockResolvedValue(1);
 
-      expect(result).toEqual([mockTenant]);
+      const result = await service.findAll(
+        { sub: 'u', email: 'a@b.com', role: Role.SUPER_ADMIN, tenantId: 't', status: 'ACTIVE' },
+        defaultQuery,
+      );
+
+      expect(result).toEqual({ data: [mockTenant], meta: { total: 1, page: 1, lastPage: 1 } });
       expect(prisma.tenant.findMany).toHaveBeenCalledWith({
         where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },
+        skip: 0,
+        take: 10,
       });
+      expect(prisma.tenant.count).toHaveBeenCalledWith({ where: { deletedAt: null } });
+    });
+
+    it('should restrict to own tenant for non-SUPER_ADMIN', async () => {
+      mockPrisma.tenant.findMany.mockResolvedValue([mockTenant]);
+      mockPrisma.tenant.count.mockResolvedValue(1);
+
+      await service.findAll(
+        { sub: 'u', email: 'a@b.com', role: Role.ADMIN, tenantId: mockTenant.id, status: 'ACTIVE' },
+        defaultQuery,
+      );
+
+      expect(prisma.tenant.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { deletedAt: null, id: mockTenant.id },
+        }),
+      );
     });
   });
 
@@ -158,16 +194,145 @@ describe('TenantsService', () => {
 
   describe('update', () => {
     const updateDto = { name: 'Acme Updated' };
+    const superAdminUser: JwtPayload = {
+      sub: 'user-1',
+      email: 'super@kodama.com',
+      role: 'SUPER_ADMIN',
+      tenantId: 'other-tenant',
+      status: 'ACTIVE',
+    };
 
-    it('should update a tenant', async () => {
-      mockPrisma.tenant.update.mockResolvedValue({ ...mockTenant, ...updateDto });
+    const adminUser: JwtPayload = {
+      sub: 'user-2',
+      email: 'admin@acme.com',
+      role: 'ADMIN',
+      tenantId: mockTenant.id,
+      status: 'ACTIVE',
+    };
 
-      const result = await service.update(mockTenant.id, updateDto);
+    it('should update a tenant (called by SUPER_ADMIN)', async () => {
+      const updatedTenant = { ...mockTenant, ...updateDto };
+      mockPrisma.tenant.update.mockResolvedValue(updatedTenant);
+      // First call for findOne inside update, second call for final response
+      mockPrisma.tenant.findUnique
+        .mockResolvedValueOnce(mockTenant)
+        .mockResolvedValueOnce(updatedTenant);
 
-      expect(result.name).toEqual(updateDto.name);
+      const result = await service.update(mockTenant.id, updateDto, superAdminUser);
+
+      expect(result).toBeDefined();
+      expect((result as { name: string }).name).toEqual(updateDto.name);
       expect(prisma.tenant.update).toHaveBeenCalledWith({
         where: { id: mockTenant.id },
-        data: { ...updateDto, config: undefined },
+        data: expect.objectContaining({ name: updateDto.name }),
+      });
+    });
+
+    it('should update own tenant (called by ADMIN)', async () => {
+      const updatedTenant = { ...mockTenant, ...updateDto };
+      mockPrisma.tenant.update.mockResolvedValue(updatedTenant);
+      mockPrisma.tenant.findUnique
+        .mockResolvedValueOnce(mockTenant)
+        .mockResolvedValueOnce(updatedTenant);
+
+      const result = await service.update(mockTenant.id, updateDto, adminUser);
+
+      expect(result).toBeDefined();
+      expect((result as { name: string }).name).toEqual(updateDto.name);
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: mockTenant.id },
+        data: expect.objectContaining({ name: updateDto.name }),
+      });
+    });
+
+    it('should throw ForbiddenException if ADMIN tries to update another tenant', async () => {
+      const otherAdmin = { ...adminUser, tenantId: 'different-id' };
+      await expect(service.update(mockTenant.id, updateDto, otherAdmin)).rejects.toThrow(
+        import('@nestjs/common').ForbiddenException,
+      );
+    });
+
+    it('should ignore slug update if called by ADMIN', async () => {
+      const dtoWithSlug = { name: 'New Name', slug: 'new-slug' };
+      mockPrisma.tenant.update.mockResolvedValue({ ...mockTenant, name: 'New Name' });
+
+      await service.update(mockTenant.id, dtoWithSlug, adminUser);
+
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: mockTenant.id },
+        data: expect.not.objectContaining({ slug: 'new-slug' }),
+      });
+    });
+
+    it('should allow slug update if called by SUPER_ADMIN', async () => {
+      const dtoWithSlug = { name: 'New Name', slug: 'new-slug' };
+      mockPrisma.tenant.update.mockResolvedValue({ ...mockTenant, ...dtoWithSlug });
+
+      await service.update(mockTenant.id, dtoWithSlug, superAdminUser);
+
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: mockTenant.id },
+        data: expect.objectContaining({ slug: 'new-slug' }),
+      });
+    });
+
+    it('should deep merge config.public and ignore config.private if called by ADMIN', async () => {
+      const existingTenant = {
+        ...mockTenant,
+        config: {
+          public: { theme: 'blue', logo: 'old.png' },
+          private: { apiKey: 'secret' },
+        },
+      };
+      prisma.tenant.findUnique.mockResolvedValue(existingTenant);
+
+      const updateConfigDto = {
+        config: {
+          public: { theme: 'red' },
+          private: { apiKey: 'hacked' },
+        },
+      };
+
+      await service.update(mockTenant.id, updateConfigDto as UpdateTenantDto, adminUser);
+
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: mockTenant.id },
+        data: expect.objectContaining({
+          config: {
+            public: { theme: 'red', logo: 'old.png' },
+            private: { apiKey: 'secret' },
+          },
+        }),
+      });
+    });
+
+    it('should allow full config update if called by SUPER_ADMIN', async () => {
+      const existingTenant = {
+        ...mockTenant,
+        config: {
+          public: { theme: 'blue' },
+          private: { apiKey: 'secret' },
+        },
+      };
+      prisma.tenant.findUnique.mockResolvedValue(existingTenant);
+
+      const updateConfigDto = {
+        config: {
+          public: { theme: 'red' },
+          private: { apiKey: 'new-secret' },
+        },
+      };
+
+      await service.update(mockTenant.id, updateConfigDto as UpdateTenantDto, superAdminUser);
+
+      expect(prisma.tenant.update).toHaveBeenCalledWith({
+        where: { id: mockTenant.id },
+        data: expect.objectContaining({
+          config: {
+            public: { theme: 'red' },
+            private: { apiKey: 'new-secret' },
+          },
+        }),
       });
     });
 
@@ -175,7 +340,9 @@ describe('TenantsService', () => {
       const dto = { slug: 'already-exists' };
       prisma.tenant.update.mockRejectedValue(createPrismaP2002Error());
 
-      await expect(service.update(mockTenant.id, dto)).rejects.toThrow(ConflictException);
+      await expect(service.update(mockTenant.id, dto, superAdminUser)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -210,6 +377,30 @@ describe('TenantsService', () => {
       await expect(service.remove(mockTenant.id)).rejects.toThrow(
         import('@nestjs/common').PreconditionFailedException,
       );
+    });
+  });
+
+  describe('isSlugAvailable', () => {
+    it('should return true if slug is not taken', async () => {
+      mockPrisma.tenant.count.mockResolvedValue(0);
+
+      const result = await service.isSlugAvailable('new-slug');
+
+      expect(result).toBe(true);
+      expect(prisma.tenant.count).toHaveBeenCalledWith({
+        where: { slug: { equals: 'new-slug', mode: 'insensitive' } },
+      });
+    });
+
+    it('should return false if slug is already taken (case-insensitive)', async () => {
+      mockPrisma.tenant.count.mockResolvedValue(1);
+
+      const result = await service.isSlugAvailable('ACME-CORP');
+
+      expect(result).toBe(false);
+      expect(prisma.tenant.count).toHaveBeenCalledWith({
+        where: { slug: { equals: 'ACME-CORP', mode: 'insensitive' } },
+      });
     });
   });
 });

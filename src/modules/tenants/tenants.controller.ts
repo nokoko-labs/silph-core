@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -10,6 +11,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
   UsePipes,
   ValidationPipe,
@@ -24,13 +26,16 @@ import { OwnershipGuard } from '@/common/guards/ownership.guard';
 import { RolesGuard } from '@/common/guards/roles.guard';
 import { JwtPayload } from '@/modules/auth/auth.service';
 import { AdminTenantResponseDto } from './dto/admin-tenant-response.dto';
+import { CheckSlugResponseDto } from './dto/check-slug-response.dto';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { FindAllTenantsQueryDto } from './dto/find-all-tenants-query.dto';
+import { PaginatedTenantsResponseDto } from './dto/paginated-tenants-response.dto';
 import { PublicTenantResponseDto } from './dto/public-tenant-response.dto';
 import { TenantResponseDto } from './dto/tenant-response.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 
-@ApiTags('tenants')
+@ApiTags('Tenants')
 @Controller('tenants')
 export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
@@ -38,7 +43,11 @@ export class TenantsController {
   @Post()
   @Public()
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  @ApiOperation({ summary: 'Create a new tenant (Public)' })
+  @ApiOperation({
+    summary: 'Create a new tenant (Public)',
+    description:
+      'Registers a new tenant with a slug and name. Automatically sets status to ACTIVE.',
+  })
   @ApiBody({
     type: CreateTenantDto,
     description: 'Tenant data to create',
@@ -60,20 +69,50 @@ export class TenantsController {
     return this.tenantsService.create(dto);
   }
 
-  @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SUPER_ADMIN)
-  @ApiBearerAuth('BearerAuth')
-  @ApiOperation({ summary: 'List all tenants (Super Admin only)' })
+  @Get('check-slug/:slug')
+  @Public()
+  @ApiOperation({
+    summary: 'Check if a slug is available (Public)',
+    description: 'Returns true if the slug is not taken by any existing tenant.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'List of tenants',
-    type: TenantResponseDto,
-    isArray: true,
+    description: 'Availability status',
+    type: CheckSlugResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Invalid slug format' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  async findAll(): Promise<TenantResponseDto[]> {
-    return this.tenantsService.findAll();
+  async checkSlug(@Param('slug') slug: string): Promise<CheckSlugResponseDto> {
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      throw new BadRequestException(
+        'Invalid slug format. Use lowercase, numbers, and hyphens only.',
+      );
+    }
+    const available = await this.tenantsService.isSlugAvailable(slug);
+    return { available };
+  }
+
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @ApiBearerAuth('BearerAuth')
+  @ApiOperation({
+    summary: 'List tenants (paginated)',
+    description:
+      'SUPER_ADMIN: all tenants. ADMIN: only their own tenant. Supports pagination, filtering by status, and sorting.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of tenants',
+    type: PaginatedTenantsResponseDto,
+  })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 500, description: 'Internal server error' })
+  async findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query() query: FindAllTenantsQueryDto,
+  ): Promise<PaginatedTenantsResponseDto> {
+    return this.tenantsService.findAll(user, query);
   }
 
   @Get(':id')
@@ -141,7 +180,7 @@ export class TenantsController {
     if (user.status !== 'ACTIVE') {
       throw new ForbiddenException('Only active users can access this');
     }
-    return this.tenantsService.update(id, dto);
+    return this.tenantsService.update(id, dto, user) as unknown as Promise<TenantResponseDto>;
   }
 
   @Delete(':id')
