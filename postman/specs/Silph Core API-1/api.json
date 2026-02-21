@@ -1,0 +1,1943 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "AppController_getHealthCheck",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "API is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheckDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Health check endpoint",
+        "tags": ["api"]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["status"],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Comprehensive health check for the system",
+        "tags": ["health"]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "description": "Validates credentials. Returns: (1) JWT when single tenant and no MFA, (2) tenant selection when user belongs to multiple tenants, or (3) MFA_REQUIRED when MFA is needed.",
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "Email and password",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JWT access token (single tenant) or tenant selection (multi-tenant)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/LoginResponseDto"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TenantSelectionResponseDto"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "MFA Required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaRequiredResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (e.g. invalid email format)"
+          },
+          "401": {
+            "description": "Invalid email or password"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Login with email and password",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/select-tenant": {
+      "post": {
+        "description": "Exchanges tempToken (from multi-tenant login) and selected tenantId for the final JWT. Validates that the user belongs to the chosen tenant.",
+        "operationId": "AuthController_selectTenant",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "tempToken from login response and tenantId selected by user",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Returns JWT access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDto"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "MFA Required for selected tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaRequiredResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (e.g. invalid tenantId format)"
+          },
+          "401": {
+            "description": "Invalid or expired temp token; tenant not in user list"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Select tenant and complete login",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/google": {
+      "get": {
+        "description": "Accepts optional ?tenantSlug= or x-tenant-slug header for Caso 3 (auto-register in tenant).",
+        "operationId": "AuthController_googleAuth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "302": {
+            "description": "Redirects to Google consent screen"
+          },
+          "401": {
+            "description": "Google OAuth not configured"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Redirect to Google OAuth (social login)",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/google/callback": {
+      "get": {
+        "operationId": "AuthController_googleAuthCallback",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Returns JWT if OAUTH_SUCCESS_REDIRECT_URL not set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDto"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "MFA Required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaRequiredResponseDto"
+                }
+              }
+            }
+          },
+          "302": {
+            "description": "Redirect to OAUTH_SUCCESS_REDIRECT_URL"
+          },
+          "401": {
+            "description": "Google auth failed or not configured"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Google OAuth callback; returns JWT or redirects to frontend",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/oauth/exchange": {
+      "post": {
+        "operationId": "AuthController_exchangeOAuthCode",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "OAuth code from callback redirect",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OauthExchangeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Returns JWT access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDto"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (e.g. missing or empty code)"
+          },
+          "401": {
+            "description": "Invalid or expired code"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Exchange OAuth code for JWT",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "AuthController_getProfile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Returns current user payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized (missing or invalid token)"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get current user from JWT",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/switch-tenant/{tenantId}": {
+      "post": {
+        "operationId": "AuthController_switchTenant",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns new JWT for the target tenant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDto"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized or access to target tenant denied"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Switch current tenant context",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/forgot-password": {
+      "post": {
+        "operationId": "AuthController_forgotPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "User email",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Email sent message"
+          },
+          "404": {
+            "description": "User not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Request password reset email",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/reset-password": {
+      "post": {
+        "operationId": "AuthController_resetPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "Token and new password",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successful"
+          },
+          "400": {
+            "description": "Invalid or expired token"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Reset password using token",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/mfa/verify": {
+      "post": {
+        "operationId": "AuthController_verifyMfa",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "MFA token and 6-digit code",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MfaVerifyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Returns final JWT tokens",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid MFA code or too many attempts"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Verify MFA code",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "description": "Creates a new user. If tenantSlug matches an active tenant, joins as USER. Otherwise, creates a new Tenant and joins as ADMIN.",
+        "operationId": "AuthController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "User registration data",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User registered successfully; returns JWT access token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "409": {
+            "description": "Email already exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Register a new user",
+        "tags": ["auth"]
+      }
+    },
+    "/admin/audit-logs": {
+      "get": {
+        "operationId": "AuditLogController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of audit logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditLogResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get all audit logs (Admin/Super Admin only)",
+        "tags": ["Admin / Audit Logs"]
+      }
+    },
+    "/admin/login-history": {
+      "get": {
+        "operationId": "LoginHistoryController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of login history records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LoginHistoryResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get login history (Admin/Super Admin only)",
+        "tags": ["Admin / Login History"]
+      }
+    },
+    "/admin/email-logs": {
+      "get": {
+        "operationId": "EmailLogsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of email logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmailLogResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get all email logs (Admin/Super Admin only)",
+        "tags": ["Admin / Email Logs"]
+      }
+    },
+    "/tenants": {
+      "post": {
+        "description": "Registers a new tenant with a slug and name. Automatically sets status to ACTIVE.",
+        "operationId": "TenantsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "Tenant data to create",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantDto"
+              },
+              "examples": {
+                "acme": {
+                  "summary": "Acme Corp",
+                  "value": {
+                    "name": "Acme Corp",
+                    "slug": "acme-corp"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tenant created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input (e.g. slug with spaces or invalid characters)"
+          },
+          "409": {
+            "description": "Tenant with same slug already exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Create a new tenant (Public)",
+        "tags": ["Tenants"]
+      },
+      "get": {
+        "operationId": "TenantsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of tenants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenantResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "List all tenants (Super Admin only)",
+        "tags": ["Tenants"]
+      }
+    },
+    "/tenants/check-slug/{slug}": {
+      "get": {
+        "description": "Returns true if the slug is not taken by any existing tenant.",
+        "operationId": "TenantsController_checkSlug",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Availability status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckSlugResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid slug format"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Check if a slug is available (Public)",
+        "tags": ["Tenants"]
+      }
+    },
+    "/tenants/{id}": {
+      "get": {
+        "operationId": "TenantsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTenantResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - Access denied"
+          },
+          "404": {
+            "description": "Tenant not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get tenant by id (Admin/Super Admin only)",
+        "tags": ["Tenants"]
+      },
+      "patch": {
+        "operationId": "TenantsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Tenant data to update",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tenant updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Tenant not found"
+          },
+          "409": {
+            "description": "Tenant with same slug already exists"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update a tenant",
+        "tags": ["Tenants"]
+      },
+      "delete": {
+        "operationId": "TenantsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tenant deleted successfully"
+          },
+          "404": {
+            "description": "Tenant not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete a tenant (Super Admin only)",
+        "tags": ["Tenants"]
+      }
+    },
+    "/tenants/slug/{slug}": {
+      "get": {
+        "description": "Used during login flow to resolve tenant before credentials. No auth required.",
+        "operationId": "TenantsController_findBySlug",
+        "parameters": [
+          {
+            "name": "slug",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicTenantResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant not found"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        },
+        "summary": "Get tenant by slug (Public)",
+        "tags": ["Tenants"]
+      }
+    },
+    "/users": {
+      "post": {
+        "operationId": "UsersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create a new user",
+        "tags": ["Admin / Users"]
+      },
+      "get": {
+        "operationId": "UsersController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get all users",
+        "tags": ["Admin / Users"]
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "operationId": "UsersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "User ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get a user by ID",
+        "tags": ["Admin / Users"]
+      },
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "User ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "User updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update a user",
+        "tags": ["Admin / Users"]
+      },
+      "delete": {
+        "operationId": "UsersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "User ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Delete a user",
+        "tags": ["Admin / Users"]
+      }
+    }
+  },
+  "info": {
+    "title": "Silph Core API",
+    "description": "Backend API documentation for Silph Core application",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "api",
+      "description": "API endpoints"
+    },
+    {
+      "name": "auth",
+      "description": "Authentication (JWT)"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "name": "JWT",
+        "description": "Enter JWT token",
+        "in": "header"
+      }
+    },
+    "schemas": {
+      "HealthCheckDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "Status message",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "Timestamp of the health check (ISO 8601)",
+            "type": "string"
+          }
+        },
+        "required": ["status", "timestamp"]
+      },
+      "LoginResponseDto": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "description": "JWT access token for Bearer authentication",
+            "type": "string"
+          },
+          "status": {
+            "description": "MFA status (e.g. MFA_REQUIRED)",
+            "type": "string"
+          },
+          "ticket": {
+            "description": "Temporary ticket for MFA verification",
+            "type": "string"
+          }
+        }
+      },
+      "TenantSelectionResponseDto": {
+        "type": "object",
+        "properties": {
+          "tenants": {
+            "description": "List of tenants the user belongs to; client must show selection UI",
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "description": "Tenant UUID",
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "description": "Tenant display name",
+                  "type": "string"
+                },
+                "slug": {
+                  "description": "Tenant URL-friendly identifier",
+                  "type": "string"
+                }
+              },
+              "required": ["id", "name", "slug"]
+            }
+          },
+          "tempToken": {
+            "description": "Short-lived JWT (5 min) to exchange for final JWT via POST /auth/select-tenant",
+            "type": "string"
+          }
+        },
+        "required": ["tenants", "tempToken"]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "description": "User email address",
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "description": "User password",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["email", "password"]
+      },
+      "MfaRequiredResponseDto": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "Error code",
+            "type": "string",
+            "enum": ["MFA_REQUIRED"]
+          },
+          "ticket": {
+            "description": "Temporary ticket for MFA verification",
+            "type": "string"
+          }
+        },
+        "required": ["message", "ticket"]
+      },
+      "SelectTenantDto": {
+        "type": "object",
+        "properties": {
+          "tempToken": {
+            "description": "Short-lived token from login tenant-selection response",
+            "type": "string",
+            "minLength": 1
+          },
+          "tenantId": {
+            "description": "Tenant UUID selected by the user",
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["tempToken", "tenantId"]
+      },
+      "OauthExchangeDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "description": "OAuth authorization code from Google callback redirect",
+            "type": "string",
+            "minLength": 1
+          },
+          "tenantSlug": {
+            "description": "Tenant context (for logging/audit); primary context comes from OAuth init",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["code"]
+      },
+      "MeResponseDto": {
+        "type": "object",
+        "properties": {
+          "sub": {
+            "description": "User ID (JWT subject)",
+            "type": "string"
+          },
+          "email": {
+            "description": "User email",
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "description": "User role",
+            "type": "string",
+            "enum": ["SUPER_ADMIN", "ADMIN", "USER"],
+            "x-enumNames": ["SUPER_ADMIN", "ADMIN", "USER"]
+          },
+          "tenantId": {
+            "description": "Tenant ID",
+            "type": "string"
+          }
+        },
+        "required": ["sub", "email", "role", "tenantId"]
+      },
+      "ForgotPasswordDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "description": "User email address",
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": ["email"]
+      },
+      "ResetPasswordDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "description": "Password reset token",
+            "type": "string",
+            "minLength": 1
+          },
+          "newPassword": {
+            "description": "New password (min 8 characters)",
+            "type": "string",
+            "minLength": 8
+          }
+        },
+        "required": ["token", "newPassword"]
+      },
+      "MfaVerifyDto": {
+        "type": "object",
+        "properties": {
+          "mfaToken": {
+            "description": "Temporary MFA token",
+            "type": "string"
+          },
+          "code": {
+            "description": "6-digit MFA code",
+            "type": "string",
+            "minLength": 6,
+            "maxLength": 6
+          }
+        },
+        "required": ["mfaToken", "code"]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2
+          },
+          "tenantSlug": {
+            "type": "string"
+          },
+          "tenantName": {
+            "type": "string"
+          }
+        },
+        "required": ["email", "password", "name"]
+      },
+      "AuditLogResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Log UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "description": "Action name (e.g. CREATE_USER)",
+            "type": "string"
+          },
+          "entity": {
+            "description": "Affected entity type",
+            "type": "string"
+          },
+          "entityId": {
+            "description": "ID of the affected entity",
+            "type": "string"
+          },
+          "payload": {
+            "description": "Action payload data"
+          },
+          "userId": {
+            "description": "Author user ID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "createdAt": {
+            "description": "Creation timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "entity",
+          "entityId",
+          "payload",
+          "userId",
+          "tenantId",
+          "createdAt"
+        ]
+      },
+      "LoginHistoryResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "History record UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "description": "User UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "tenantId": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "ip": {
+            "description": "IP address of the requester",
+            "type": "string",
+            "nullable": true
+          },
+          "userAgent": {
+            "description": "User Agent of the requester",
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "description": "Creation timestamp"
+          }
+        },
+        "required": ["id", "userId", "tenantId", "ip", "userAgent", "createdAt"]
+      },
+      "EmailLogResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Log UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "to": {
+            "description": "Recipient email",
+            "type": "string",
+            "format": "email"
+          },
+          "subject": {
+            "description": "Email subject",
+            "type": "string"
+          },
+          "status": {
+            "description": "Email status",
+            "type": "string",
+            "enum": ["SENT", "FAILED", "PENDING"],
+            "x-enumNames": ["SENT", "FAILED", "PENDING"]
+          },
+          "errorMessage": {
+            "description": "Error message if failed",
+            "type": "string"
+          },
+          "sentAt": {
+            "description": "When the email was sent"
+          },
+          "tenantId": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["id", "to", "subject", "status", "sentAt"]
+      },
+      "ThemeDto": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string",
+            "example": "red"
+          },
+          "icon": {
+            "type": "string",
+            "example": "mushroom"
+          }
+        },
+        "required": ["color", "icon"]
+      },
+      "PublicConfigDto": {
+        "type": "object",
+        "properties": {
+          "theme": {
+            "$ref": "#/components/schemas/ThemeDto"
+          }
+        },
+        "required": ["theme"]
+      },
+      "ConfigDto": {
+        "type": "object",
+        "properties": {
+          "public": {
+            "$ref": "#/components/schemas/PublicConfigDto"
+          },
+          "private": {
+            "type": "object"
+          }
+        },
+        "required": ["public"]
+      },
+      "CreateTenantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "example": "Acme Corp",
+            "description": "Display name of the tenant"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "/^[a-z0-9-]+$/",
+            "example": "acme-corp",
+            "description": "Unique URL-friendly identifier (lowercase, numbers, hyphens only)"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ConfigDto"
+          }
+        },
+        "required": ["name", "slug"]
+      },
+      "TenantResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "description": "Display name",
+            "type": "string"
+          },
+          "slug": {
+            "description": "URL-friendly identifier",
+            "type": "string"
+          },
+          "status": {
+            "description": "Current status of the tenant",
+            "type": "string",
+            "enum": ["ACTIVE", "PAUSED", "DELETED"],
+            "x-enumNames": ["ACTIVE", "PAUSED", "DELETED"]
+          },
+          "config": {
+            "description": "Optional tenant configuration",
+            "nullable": true
+          },
+          "mfaRequired": {
+            "description": "Whether MFA is required for this tenant",
+            "type": "boolean"
+          },
+          "enabledAuthProviders": {
+            "description": "List of enabled authentication providers",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "description": "Creation timestamp"
+          },
+          "updatedAt": {
+            "description": "Last update timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status",
+          "mfaRequired",
+          "enabledAuthProviders",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CheckSlugResponseDto": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "description": "Whether the slug is available or already taken",
+            "type": "boolean"
+          }
+        },
+        "required": ["available"]
+      },
+      "AdminTenantResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "description": "Display name",
+            "type": "string"
+          },
+          "slug": {
+            "description": "URL-friendly identifier",
+            "type": "string"
+          },
+          "status": {
+            "description": "Current status of the tenant",
+            "type": "string",
+            "enum": ["ACTIVE", "PAUSED", "DELETED"],
+            "x-enumNames": ["ACTIVE", "PAUSED", "DELETED"]
+          },
+          "config": {
+            "description": "Filtered tenant configuration",
+            "type": "object",
+            "properties": {
+              "public": {
+                "description": "Publicly accessible configuration (themes, icons, etc.)",
+                "type": "object",
+                "additionalProperties": {}
+              },
+              "private": {
+                "description": "Filtered private configuration for ADMINs",
+                "type": "object",
+                "properties": {
+                  "activeIntegrations": {
+                    "description": "List of safe-to-view active integrations",
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "required": ["public", "private"]
+          },
+          "mfaRequired": {
+            "description": "Whether MFA is required for this tenant",
+            "type": "boolean"
+          },
+          "enabledAuthProviders": {
+            "description": "List of enabled authentication providers",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "description": "Creation timestamp"
+          },
+          "updatedAt": {
+            "description": "Last update timestamp"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status",
+          "config",
+          "mfaRequired",
+          "enabledAuthProviders",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PublicTenantResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "description": "Display name",
+            "type": "string"
+          },
+          "slug": {
+            "description": "URL-friendly identifier",
+            "type": "string"
+          },
+          "enabledAuthProviders": {
+            "description": "List of enabled authentication providers",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "config": {
+            "description": "Filtered tenant configuration containing only public keys",
+            "type": "object",
+            "properties": {
+              "public": {
+                "description": "Publicly accessible configuration",
+                "type": "object",
+                "additionalProperties": {}
+              }
+            },
+            "required": ["public"]
+          }
+        },
+        "required": ["id", "name", "slug", "enabledAuthProviders", "config"]
+      },
+      "UpdateTenantDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "example": "Acme Corp",
+            "description": "Display name of the tenant"
+          },
+          "slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "/^[a-z0-9-]+$/",
+            "example": "acme-corp",
+            "description": "Unique URL-friendly identifier (lowercase, numbers, hyphens only)"
+          },
+          "config": {
+            "$ref": "#/components/schemas/ConfigDto"
+          }
+        }
+      },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "description": "User email address",
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "description": "User password (optional for social login)",
+            "type": "string",
+            "minLength": 6
+          },
+          "tenantId": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "description": "User role",
+            "type": "string",
+            "enum": ["SUPER_ADMIN", "ADMIN", "USER"],
+            "x-enumNames": ["SUPER_ADMIN", "ADMIN", "USER"],
+            "default": "USER"
+          }
+        },
+        "required": ["email", "tenantId"]
+      },
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "User UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "description": "User email address",
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "description": "User role",
+            "type": "string",
+            "enum": ["SUPER_ADMIN", "ADMIN", "USER"],
+            "x-enumNames": ["SUPER_ADMIN", "ADMIN", "USER"]
+          },
+          "tenantId": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "description": "Creation timestamp"
+          },
+          "updatedAt": {
+            "description": "Last update timestamp"
+          },
+          "accounts": {
+            "description": "Linked social accounts",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "description": "Account UUID",
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "provider": {
+                  "description": "Provider name (e.g. google)",
+                  "type": "string"
+                },
+                "providerAccountId": {
+                  "description": "Provider account ID",
+                  "type": "string"
+                },
+                "createdAt": {
+                  "description": "Account creation timestamp"
+                },
+                "updatedAt": {
+                  "description": "Account update timestamp"
+                }
+              },
+              "required": ["id", "provider", "providerAccountId", "createdAt", "updatedAt"]
+            }
+          }
+        },
+        "required": ["id", "email", "role", "tenantId", "createdAt", "updatedAt"]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "description": "User email address",
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "description": "User password (optional for social login)",
+            "type": "string",
+            "minLength": 6
+          },
+          "tenantId": {
+            "description": "Tenant UUID",
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "description": "User role",
+            "type": "string",
+            "enum": ["SUPER_ADMIN", "ADMIN", "USER"],
+            "x-enumNames": ["SUPER_ADMIN", "ADMIN", "USER"],
+            "default": "USER"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,390 @@
+{
+  "info": {
+    "name": "Silph Core API (Auto-generated)",
+    "description": "Auto-generated Postman collection from NestJS controllers in silph-core repository",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "API",
+      "item": [
+        {
+          "name": "GET / - Health check endpoint",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Health check endpoint - returns API status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health - Comprehensive health check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Comprehensive health check for the system (database, redis, memory)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/login - Login with email and password",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Validates credentials. Returns JWT, tenant selection, or MFA_REQUIRED"
+          }
+        },
+        {
+          "name": "POST /auth/select-tenant - Select tenant and complete login",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/select-tenant",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "select-tenant"]
+            },
+            "description": "Exchanges tempToken and selected tenantId for the final JWT"
+          }
+        },
+        {
+          "name": "GET /auth/google - Redirect to Google OAuth",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auth/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google"]
+            },
+            "description": "Redirect to Google OAuth (social login)"
+          }
+        },
+        {
+          "name": "GET /auth/google/callback - Google OAuth callback",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/callback",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google", "callback"]
+            },
+            "description": "Google OAuth callback; returns JWT or redirects to frontend"
+          }
+        },
+        {
+          "name": "POST /auth/oauth/exchange - Exchange OAuth code for JWT",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/oauth/exchange",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "oauth", "exchange"]
+            },
+            "description": "Exchange OAuth code for JWT"
+          }
+        },
+        {
+          "name": "GET /auth/me - Get current user from JWT",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Get current user from JWT"
+          }
+        },
+        {
+          "name": "POST /auth/switch-tenant/:tenantId - Switch current tenant context",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/switch-tenant/:tenantId",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "switch-tenant", ":tenantId"],
+              "variable": [
+                {
+                  "key": "tenantId",
+                  "value": "",
+                  "description": "Target tenant ID to switch to"
+                }
+              ]
+            },
+            "description": "Switch current tenant context"
+          }
+        },
+        {
+          "name": "POST /auth/forgot-password - Request password reset email",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            },
+            "description": "Request password reset email"
+          }
+        },
+        {
+          "name": "POST /auth/reset-password - Reset password using token",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            },
+            "description": "Reset password using token"
+          }
+        },
+        {
+          "name": "POST /auth/mfa/verify - Verify MFA code",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/auth/mfa/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "mfa", "verify"]
+            },
+            "description": "Verify MFA code"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin / Email Logs",
+      "item": [
+        {
+          "name": "GET /admin/email-logs - Get all email logs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-logs",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-logs"]
+            },
+            "description": "Get all email logs (Super Admin only)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenants",
+      "item": [
+        {
+          "name": "POST /tenants - Create a new tenant",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/tenants",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants"]
+            },
+            "description": "Create a new tenant (Public)"
+          }
+        },
+        {
+          "name": "GET /tenants - List all tenants",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tenants",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants"]
+            },
+            "description": "List all tenants (Super Admin only)"
+          }
+        },
+        {
+          "name": "GET /tenants/:id - Get tenant by id",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tenants/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Tenant UUID"
+                }
+              ]
+            },
+            "description": "Get tenant by id"
+          }
+        },
+        {
+          "name": "GET /tenants/slug/:slug - Get tenant by slug",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/tenants/slug/:slug",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", "slug", ":slug"],
+              "variable": [
+                {
+                  "key": "slug",
+                  "value": "",
+                  "description": "Tenant slug"
+                }
+              ]
+            },
+            "description": "Get tenant by slug (Public) - Used during login flow"
+          }
+        },
+        {
+          "name": "PATCH /tenants/:id - Update a tenant",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/tenants/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Tenant UUID"
+                }
+              ]
+            },
+            "description": "Update a tenant"
+          }
+        },
+        {
+          "name": "DELETE /tenants/:id - Delete a tenant",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/tenants/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Tenant UUID"
+                }
+              ]
+            },
+            "description": "Delete a tenant (Super Admin only)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "POST /users - Create a new user",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "Create a new user"
+          }
+        },
+        {
+          "name": "GET /users - Get all users",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "Get all users"
+          }
+        },
+        {
+          "name": "GET /users/:id - Get a user by ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Get a user by ID"
+          }
+        },
+        {
+          "name": "PATCH /users/:id - Update a user",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Update a user"
+          }
+        },
+        {
+          "name": "DELETE /users/:id - Delete a user",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Delete a user"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,2047 @@
+{
+  "info": {
+    "_postman_id": "4b254990-fdc8-416e-9984-b90571c0758f",
+    "name": "Silph Core API",
+    "description": "Auto-generated Postman collection from NestJS controllers in silph-core repository",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "API",
+      "item": [
+        {
+          "name": "GET / - Health check endpoint",
+          "id": "4652967e-885c-40aa-aa49-6644fea43d1c",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            },
+            "description": "Health check endpoint - returns API status"
+          },
+          "response": []
+        }
+      ],
+      "id": "99e6de8b-0508-49f7-b52e-7a5e213375fa"
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health - Comprehensive health check",
+          "id": "2a792138-296c-48fb-8ced-dcfa958aad76",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Comprehensive health check for the system (database, redis, memory)"
+          },
+          "response": []
+        }
+      ],
+      "id": "ad408ffa-b2d9-4faf-8e8e-ecd1c3ead9f3"
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/login - Login with email and password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "2c0c9284-3aa3-4b97-9ba2-2de2b3436d5b",
+                "exec": [
+                  "// Parseamos la respuesta",
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    ",
+                  "    // CASO A: Usuario Multi-tenant",
+                  "    if (jsonData.tempToken && jsonData.tenants) {",
+                  "        console.log(\"Detectado flujo Multi-tenant. Seteando tempToken y primer tenantId.\");",
+                  "        ",
+                  "        pm.environment.set(\"tempToken\", jsonData.tempToken);",
+                  "        ",
+                  "        // Seleccionamos el primer tenant por defecto para automatizar, ",
+                  "        // pero podrías cambiarlo manualmente en la variable de entorno",
+                  "        pm.environment.set(\"selectedTenantId\", jsonData.tenants[0].id);",
+                  "        ",
+                  "        // Limpiamos el access_token viejo para evitar confusiones",
+                  "        pm.environment.unset(\"access_token\");",
+                  "    } ",
+                  "    ",
+                  "    // CASO B: Usuario Single-tenant",
+                  "    else if (jsonData.access_token) {",
+                  "        console.log(\"Detectado flujo Single-tenant. Seteando access_token final.\");",
+                  "        ",
+                  "        pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "        ",
+                  "        // Limpiamos variables del flujo multi-tenant",
+                  "        pm.environment.unset(\"tempToken\");",
+                  "        pm.environment.unset(\"selectedTenantId\");",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "72e372b5-ca62-4a9c-baf4-60d426236d83",
+                "exec": [""],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "id": "58aee80a-ae31-4bb7-bba5-d4584160b9e3",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"mario@mushroom.com\",\n    \"password\": \"Password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Validates credentials. Returns JWT, tenant selection, or MFA_REQUIRED"
+          },
+          "response": [
+            {
+              "id": "785249e8-d555-4ac9-97a3-ca580e7b2535",
+              "name": "Multi-tenant user (active/active)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"lion-o@thundercats.org\",\n    \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T12:27:56.161Z",
+              "body": "{\n    \"tenants\": [\n        {\n            \"id\": \"38763cdf-3451-4ffe-a9d2-60c3c0912abe\",\n            \"name\": \"Ghostbusters HQ\",\n            \"slug\": \"ghostbusters-hq\"\n        },\n        {\n            \"id\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n            \"name\": \"ThunderCats Lair\",\n            \"slug\": \"thundercats-lair\"\n        }\n    ],\n    \"tempToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3NzFmNTQzMy02MmQ3LTQ4YzUtYjg2Yi1hY2MwYzA1Nzk0NmIiLCJ0eXBlIjoidGVuYW50X3NlbGVjdGlvbiIsImlhdCI6MTc3MTI0NTA0MSwiZXhwIjoxNzcxMjQ1MzQxfQ.vV4pHXtJsiyh_S0kOUTcaf_0Z9DIGRfMo_as6MTUFlg\"\n}"
+            },
+            {
+              "id": "e75f010a-388f-4d90-aedb-6f6fb9778780",
+              "name": "Multi-tenant user (active/suspended or deleted)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"venkman@ghostbusters.com\",\n    \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T12:27:56.161Z",
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMTdkMGRjZi05YWE0LTQ4NTQtYWFkZS0yZmYyYmNjYzU3MGMiLCJlbWFpbCI6InZlbmttYW5AZ2hvc3RidXN0ZXJzLmNvbSIsInJvbGUiOiJBRE1JTiIsInRlbmFudElkIjoiMzg3NjNjZGYtMzQ1MS00ZmZlLWE5ZDItNjBjM2MwOTEyYWJlIiwic3RhdHVzIjoiQUNUSVZFIiwiaWF0IjoxNzcxMjQ3NTkyLCJleHAiOjE3NzE4NTIzOTJ9.qtAD6jJ9MWum-zI8btV3aVsvJFD_JbXtoWjgJ3hNdz8\"\n}"
+            },
+            {
+              "id": "68115f1d-26ea-4d8c-b9cb-8cd63ca93c8f",
+              "name": "Single-tenant user (active)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"mario@mushroom.com\",\n    \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T12:31:03.085Z",
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjODg5ODZlNC05ZWMwLTQ4OTQtYWJkYi1lZmMyYTM5YThiOWMiLCJlbWFpbCI6Im1hcmlvQG11c2hyb29tLmNvbSIsInJvbGUiOiJBRE1JTiIsInRlbmFudElkIjoiOGFiZWI4ZTgtNWI0OC00ZTk1LWFlMDYtY2RkNjFkYWJhN2VlIiwic3RhdHVzIjoiQUNUSVZFIiwiaWF0IjoxNzcxMjQ1MDc3LCJleHAiOjE3NzE4NDk4Nzd9.7zeVglcS5-CJCTyRm8gWfjRoq00_G1xEgw3gWt-puLk\"\n}"
+            },
+            {
+              "id": "9d0eb551-e87a-4437-95fd-01857f13621c",
+              "name": "Single-tenant user (pending)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"luigi@mushroom.com\",\n    \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T12:31:03.085Z",
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhYTJjMTZhYy03NGJmLTRmNTYtYTFjMS02ZjYwMTJiNDdjZmYiLCJlbWFpbCI6Imx1aWdpQG11c2hyb29tLmNvbSIsInJvbGUiOiJVU0VSIiwidGVuYW50SWQiOiI4YWJlYjhlOC01YjQ4LTRlOTUtYWUwNi1jZGQ2MWRhYmE3ZWUiLCJzdGF0dXMiOiJQRU5ESU5HIiwiaWF0IjoxNzcxMjQ3Mzg2LCJleHAiOjE3NzE4NTIxODZ9.hjew3PJF2YbH1tpyZj5ISEKzXyaw2laumNEm9Qb4VSU\"\n}"
+            },
+            {
+              "id": "555a20fc-c0c7-46ea-ae24-9458806d8444",
+              "name": "Single-tenant user (suspended)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"bowser@mushroom.com\",\n    \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T12:31:03.085Z",
+              "body": "{\n    \"message\": \"Invalid email or password\",\n    \"error\": \"Unauthorized\",\n    \"statusCode\": 401\n}"
+            },
+            {
+              "id": "7cecb79f-0e50-42a2-8419-83d7ca3d1f75",
+              "name": "Single-tenant user (deleted)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"toad@mushroom.com\",\n    \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T12:31:03.085Z",
+              "body": "{\n    \"message\": \"Invalid email or password\",\n    \"error\": \"Unauthorized\",\n    \"statusCode\": 401\n}"
+            },
+            {
+              "id": "3405d5e3-53b3-4a69-83bc-7b80c9f2de5e",
+              "name": "Super Admin user",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"admin@nokoko.com\",\n    \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T12:32:13.409Z",
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwYzM4OTg0Yy0wNDk2LTQzODYtOGU4Mi02MTliOGFhMjNjMGEiLCJlbWFpbCI6ImFkbWluQG5va29rby5jb20iLCJyb2xlIjoiU1VQRVJfQURNSU4iLCJ0ZW5hbnRJZCI6IjI2ZDQzNjRjLThiNjItNDVjNi05MGQ1LWI3OWZkZjhjNDkwNiIsInN0YXR1cyI6IkFDVElWRSIsImlhdCI6MTc3MTI0NTE0MiwiZXhwIjoxNzcxODQ5OTQyfQ.ZxP5dfeX2Qqf_pcGNNio-D6cdPe8DDt1gZmcsf0TtyQ\"\n}"
+            },
+            {
+              "id": "287bf75e-1122-441b-892b-53aae3e7a3ae",
+              "name": "Invalid email or password",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"mario@mushroom.com\",\n    \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T12:39:08.609Z",
+              "body": "{\n    \"message\": \"Invalid email or password\",\n    \"error\": \"Unauthorized\",\n    \"statusCode\": 401\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/select-tenant - Select tenant and complete login",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "3bea51aa-4ca6-4f98-8610-3d6d57afac9c",
+                "exec": [""],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "79c069c9-221f-411f-b606-97504edcbb5f",
+                "exec": [
+                  "const jsonData = pm.response.json();",
+                  "",
+                  "if (jsonData.access_token) {",
+                  "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    console.log(\"access_token final guardado.\");",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "id": "0119c9bc-6450-4be9-82ce-c77bdac2131c",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"tempToken\": \"{{tempToken}}\",\n    \"tenantId\": \"{{selectedTenantId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/select-tenant",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "select-tenant"]
+            },
+            "description": "Exchanges tempToken and selected tenantId for the final JWT"
+          },
+          "response": [
+            {
+              "id": "0bdd6cfe-d594-4034-83b1-df8cf2541203",
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"tempToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhY2JkYThhMS00MWQwLTRiMzgtYjdhMi04ZWQ1Y2VjYjQ4MmIiLCJ0eXBlIjoidGVuYW50X3NlbGVjdGlvbiIsImlhdCI6MTc3MTI0NzY3NSwiZXhwIjoxNzcxMjQ3OTc1fQ.7Tq6gFAzJRWSepfbIhQDLhQqY7XISYe3ve16jBwGeIQ\",\n    \"tenantId\": \"38763cdf-3451-4ffe-a9d2-60c3c0912abe\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/select-tenant",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "select-tenant"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T13:14:45.436Z",
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1MmEyOGM0MS00ODE5LTRmY2MtYjEyNC0wMTQxOWYzNTg5NmUiLCJlbWFpbCI6Imxpb24tb0B0aHVuZGVyY2F0cy5vcmciLCJyb2xlIjoiVVNFUiIsInRlbmFudElkIjoiMzg3NjNjZGYtMzQ1MS00ZmZlLWE5ZDItNjBjM2MwOTEyYWJlIiwic3RhdHVzIjoiQUNUSVZFIiwiaWF0IjoxNzcxMjQ3Njc5LCJleHAiOjE3NzE4NTI0Nzl9.icxmp7vW9DBu5XoGQ_lbeMp_JXmOx5hHQv8EwoxDPjs\"\n}"
+            },
+            {
+              "id": "85f068e0-7931-40f1-8274-5110ba886b07",
+              "name": "Expired",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"tempToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhY2JkYThhMS00MWQwLTRiMzgtYjdhMi04ZWQ1Y2VjYjQ4MmIiLCJ0eXBlIjoidGVuYW50X3NlbGVjdGlvbiIsImlhdCI6MTc3MTI0NzY3NSwiZXhwIjoxNzcxMjQ3OTc1fQ.7Tq6gFAzJRWSepfbIhQDLhQqY7XISYe3ve16jBwGeIQ\",\n    \"tenantId\": \"38763cdf-3451-4ffe-a9d2-60c3c0912abe\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/select-tenant",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "select-tenant"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T13:14:45.436Z",
+              "body": "{\n    \"message\": \"Temp token expired or already used\",\n    \"error\": \"Unauthorized\",\n    \"statusCode\": 401\n}"
+            },
+            {
+              "id": "f16f4862-e6d6-46c0-9cc1-a4bf2c38c734",
+              "name": "Invalid tenantId",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"tempToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhY2JkYThhMS00MWQwLTRiMzgtYjdhMi04ZWQ1Y2VjYjQ4MmIiLCJ0eXBlIjoidGVuYW50X3NlbGVjdGlvbiIsImlhdCI6MTc3MTI0NzY3NSwiZXhwIjoxNzcxMjQ3OTc1fQ.7Tq6gFAzJRWSepfbIhQDLhQqY7XISYe3ve16jBwGeIQ\",\n    \"tenantId\": \"Invalid-Tenant_ID\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/select-tenant",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "select-tenant"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T13:14:45.436Z",
+              "body": "{\n    \"statusCode\": 400,\n    \"message\": \"Validation failed\",\n    \"errors\": [\n        {\n            \"validation\": \"uuid\",\n            \"code\": \"invalid_string\",\n            \"message\": \"Invalid uuid\",\n            \"path\": [\n                \"tenantId\"\n            ]\n        }\n    ]\n}"
+            },
+            {
+              "id": "f902391e-7178-4de7-a2cc-f82fcfd58df1",
+              "name": "Invalid tempToken",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"tempToken\": \"Invalid-Temp-Token\",\n    \"tenantId\": \"38763cdf-3451-4ffe-a9d2-60c3c0912abe\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/select-tenant",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "select-tenant"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-16T13:14:45.436Z",
+              "body": "{\n    \"message\": \"Invalid or expired temp token\",\n    \"error\": \"Unauthorized\",\n    \"statusCode\": 401\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /auth/google - Redirect to Google OAuth",
+          "id": "6a4a9ad9-9155-46fc-802e-0d2f9a905c2f",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google"]
+            },
+            "description": "Redirect to Google OAuth (social login)"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /auth/google/callback - Google OAuth callback",
+          "id": "b424452e-5ed7-46ae-a9a7-b367274ee1a0",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/google/callback",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "google", "callback"]
+            },
+            "description": "Google OAuth callback; returns JWT or redirects to frontend"
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/oauth/exchange - Exchange OAuth code for JWT",
+          "id": "2b138f81-5c18-468a-bbed-ece4ca16b32f",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"code\": \"4%2F0AfrIepC3oZom7dDTs32JxlfmQQarx3NrogdxzH8ra-ertGqbiHoqSRIZdWQ-gKo0-ijmOA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/oauth/exchange",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "oauth", "exchange"]
+            },
+            "description": "Exchange OAuth code for JWT"
+          },
+          "response": [
+            {
+              "id": "7ed6515a-33da-47dc-be6a-ab19dffe5245",
+              "name": "401 - Unauthorized",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"code\": \"4%2F0AfrIepC3oZom7dDTs32JxlfmQQarx3NrogdxzH8ra-ertGqbiHoqSRIZdWQ-gKo0-ijmOA\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/oauth/exchange",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "oauth", "exchange"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-17T20:14:20.028Z",
+              "body": "{\n    \"message\": \"Invalid or expired OAuth code\",\n    \"error\": \"Unauthorized\",\n    \"statusCode\": 401\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /auth/me - Get current user from JWT",
+          "id": "8b1bb423-ebfc-4671-aa5b-50734a72e989",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            },
+            "description": "Get current user from JWT"
+          },
+          "response": [
+            {
+              "id": "3eb94905-baef-4718-87f6-fae0f8a3331c",
+              "name": "200 - Me",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/me",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "me"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-17T20:32:15.779Z",
+              "body": "{\n    \"sub\": \"c88986e4-9ec0-4894-abdb-efc2a39a8b9c\",\n    \"email\": \"mario@mushroom.com\",\n    \"role\": \"ADMIN\",\n    \"tenantId\": \"8abeb8e8-5b48-4e95-ae06-cdd61daba7ee\",\n    \"status\": \"ACTIVE\",\n    \"iat\": 1771360313,\n    \"exp\": 1771965113\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/switch-tenant/:tenantId - Switch current tenant context",
+          "id": "f8155c54-1a3f-4284-bdb0-d57e9622c61a",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/switch-tenant/:tenantId",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "switch-tenant", ":tenantId"],
+              "variable": [
+                {
+                  "key": "tenantId",
+                  "value": "8abeb8e8-5b48-4e95-ae06-cdd61daba7ee",
+                  "description": "Target tenant ID to switch to"
+                }
+              ]
+            },
+            "description": "Switch current tenant context"
+          },
+          "response": [
+            {
+              "id": "f5a5720f-8c13-4f7c-a770-e5b7a4717c37",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/switch-tenant/:tenantId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "switch-tenant", ":tenantId"],
+                  "variable": [
+                    {
+                      "key": "tenantId",
+                      "value": "45790ba4-8614-46e7-bc58-63004a752186",
+                      "description": "Target tenant ID to switch to"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-17T20:57:32.415Z",
+              "body": "{\n    \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlNDMxZDhhZi1lYzM5LTQxZGYtYWQzMC0wMWRjNTlmOWNiOGYiLCJlbWFpbCI6Imxpb24tb0B0aHVuZGVyY2F0cy5vcmciLCJyb2xlIjoiQURNSU4iLCJ0ZW5hbnRJZCI6IjQ1NzkwYmE0LTg2MTQtNDZlNy1iYzU4LTYzMDA0YTc1MjE4NiIsInN0YXR1cyI6IkFDVElWRSIsImlhdCI6MTc3MTM2MTgyOCwiZXhwIjoxNzcxOTY2NjI4fQ.OhBQD99Qguoa7VTYq15OMHciI7Y783iSnTKD8peaG48\"\n}"
+            },
+            {
+              "id": "5fe6416c-a3dc-4be9-a32a-35a2878ad4fe",
+              "name": "401 - Unauthorize",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/switch-tenant/:tenantId",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "switch-tenant", ":tenantId"],
+                  "variable": [
+                    {
+                      "key": "tenantId",
+                      "value": "45790ba4-8614-46e7-bc58-63004a752144",
+                      "description": "Target tenant ID to switch to"
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-17T20:57:59.060Z",
+              "body": "{\n    \"message\": \"Access to target tenant denied or tenant is not active\",\n    \"error\": \"Unauthorized\",\n    \"statusCode\": 401\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/forgot-password - Request password reset email",
+          "id": "11677197-ab97-40b7-8176-c2b0aa2b864b",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"mario@mushroom.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "forgot-password"]
+            },
+            "description": "Request password reset email"
+          },
+          "response": [
+            {
+              "id": "4d10a821-39c2-4a24-94e4-833f4c8edba7",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"mario@mushroom.com\"    \n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/forgot-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "forgot-password"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-17T21:04:12.130Z",
+              "body": "{\n    \"message\": \"If an account with that email exists, a password reset link has been sent.\",\n    \"_debug\": \"d7400414d5c8faf779919d9e30cb6c9d35da0d8cad4b75e4a47d7a103e5e3c2b\"\n}"
+            },
+            {
+              "id": "d46b9bad-dc08-44b3-b5ba-9d2e4b36d3e5",
+              "name": "400 - Bad Request",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/forgot-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "forgot-password"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-17T21:01:16.321Z",
+              "body": "{\n    \"statusCode\": 400,\n    \"message\": \"Validation failed\",\n    \"errors\": [\n        {\n            \"validation\": \"email\",\n            \"code\": \"invalid_string\",\n            \"message\": \"Invalid email\",\n            \"path\": [\n                \"email\"\n            ]\n        }\n    ]\n}"
+            },
+            {
+              "id": "8885ed6d-40d4-4065-bcee-6b66d144d37b",
+              "name": "404 - Not Found",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "name": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"goomba@mushroom.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/forgot-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "forgot-password"]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-17T21:02:14.950Z",
+              "body": "{\n    \"message\": \"User with this email does not exist\",\n    \"error\": \"Not Found\",\n    \"statusCode\": 404\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/reset-password - Reset password using token",
+          "id": "8f3d33e3-094a-4ee8-8ba9-900357e65235",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"f1f40bb6756c0dc1ee3e3426b5b6023f13af5088ac18a00cc066323d9e6a6c59\",\n    \"newPassword\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "reset-password"]
+            },
+            "description": "Reset password using token"
+          },
+          "response": [
+            {
+              "id": "8391de1c-b3d8-4a77-aaf2-5f19933699ba",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"token\": \"501a8bc88183d34c01e32cb74385c85d1bed809c781830a7d1f2efa1e7bb92a0\",\n    \"newPassword\": \"Password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/reset-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "reset-password"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T12:30:35.062Z",
+              "body": "{\n    \"message\": \"Password has been successfully updated.\"\n}"
+            },
+            {
+              "id": "1b1b58b1-f6f0-466b-aec7-5d4389d74c2b",
+              "name": "400 - Bad Request",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"token\": \"501a8bc88183d34c01e32cb74385c85d1bed809c781830a7d1f2efa1e7bb92a0\",\n    \"newPassword\": \"Password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/auth/reset-password",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["auth", "reset-password"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T12:30:35.062Z",
+              "body": "{\n    \"message\": \"Invalid or expired token\",\n    \"error\": \"Bad Request\",\n    \"statusCode\": 400\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/mfa/verify - Verify MFA code",
+          "id": "860341bd-d710-427f-a78f-779f4584e82d",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/mfa/verify",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "mfa", "verify"]
+            },
+            "description": "Verify MFA code"
+          },
+          "response": []
+        },
+        {
+          "name": "POST /auth/register - Register a new user",
+          "id": "fc9869c4-cd1b-4135-9b54-34741d945352",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"Password123\",\n  \"name\": \"User Name\",\n  \"tenantSlug\": \"acme\",\n  \"tenantName\": \"Acme\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "register"]
+            },
+            "description": "Register a new user"
+          },
+          "response": []
+        }
+      ],
+      "id": "eb6efedb-bd13-483f-b99c-8f9b6b0db48f"
+    },
+    {
+      "name": "Admin / Logs",
+      "item": [
+        {
+          "name": "GET /admin/email-logs - Get all email logs",
+          "id": "54010dac-c069-4dd8-a905-8bcba98a21c8",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-logs",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "email-logs"]
+            },
+            "description": "Get all email logs (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/audit-logs - Get all audit logs",
+          "id": "af5e339e-54d3-4603-b6ec-7a7a39a926de",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-logs",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "audit-logs"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /admin/login-history - Get login history",
+          "id": "7fcb0c0b-c031-4a35-96d6-798e8b50752b",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/login-history",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "login-history"]
+            },
+            "description": "Get login history (Admin/Super Admin only)"
+          },
+          "response": []
+        }
+      ],
+      "id": "3116c0ec-aa9c-425c-a3a9-ed5347772c69"
+    },
+    {
+      "name": "Tenants",
+      "item": [
+        {
+          "name": "POST /tenants - Create a new tenant",
+          "id": "2ba3a663-d857-4615-b60c-0fb7486de02e",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"The John Doe's Workspace\",\n    \"slug\": \"john-doe-workspace\",\n    \"config\": {\n        \"public\": {\n            \"theme\": {\n                \"color\": \"blue\",\n                \"icon\": \"house\"\n            }\n        }\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tenants",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants"]
+            },
+            "description": "Create a new tenant (Public)"
+          },
+          "response": [
+            {
+              "id": "36f1d640-fbc3-4edb-968d-3a7169569816",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"The John Doe's Workspace\", \n    \"slug\": \"john-doe-workspace\",\n    \"config\": {\n        \"public\": {\n            \"theme\": {\n                \"color\": \"blue\",\n                \"icon\": \"house\"\n            }\n        },\n        \"private\": {} \n    }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/tenants",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T13:17:38.686Z",
+              "body": "{\n    \"id\": \"20970ce4-888b-47a2-bdae-2c9da0f330c8\",\n    \"name\": \"The John Doe's Workspace\",\n    \"slug\": \"john-doe-workspace\",\n    \"status\": \"ACTIVE\",\n    \"config\": {\n        \"public\": {\n            \"theme\": {\n                \"icon\": \"house\",\n                \"color\": \"blue\"\n            }\n        }\n    },\n    \"mfaRequired\": false,\n    \"enabledAuthProviders\": [\n        \"password\"\n    ],\n    \"createdAt\": \"2026-02-19T11:50:04.300Z\",\n    \"updatedAt\": \"2026-02-19T11:50:04.300Z\",\n    \"deletedAt\": null\n}"
+            },
+            {
+              "id": "1b21bfec-be2a-490d-980a-bd807a8c339d",
+              "name": "400 - Bad Request",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"name\": \"\",\n    \"slug\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/tenants",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants"]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T13:16:52.022Z",
+              "body": "{\n    \"statusCode\": 400,\n    \"message\": \"Validation failed\",\n    \"errors\": [\n        {\n            \"code\": \"too_small\",\n            \"minimum\": 1,\n            \"type\": \"string\",\n            \"inclusive\": true,\n            \"exact\": false,\n            \"message\": \"String must contain at least 1 character(s)\",\n            \"path\": [\n                \"name\"\n            ]\n        },\n        {\n            \"code\": \"too_small\",\n            \"minimum\": 1,\n            \"type\": \"string\",\n            \"inclusive\": true,\n            \"exact\": false,\n            \"message\": \"String must contain at least 1 character(s)\",\n            \"path\": [\n                \"slug\"\n            ]\n        },\n        {\n            \"validation\": \"regex\",\n            \"code\": \"invalid_string\",\n            \"message\": \"slug must contain only lowercase letters, numbers and hyphens (no spaces)\",\n            \"path\": [\n                \"slug\"\n            ]\n        }\n    ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /tenants - List all tenants",
+          "id": "9565e4ff-b01c-4772-8013-ffd6b6535f45",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants"]
+            },
+            "description": "List all tenants (Super Admin only)"
+          },
+          "response": [
+            {
+              "id": "d88c7581-f7b9-4e7b-9090-38fa25cdbb6c",
+              "name": "403 - Forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/tenants",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants"]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T13:20:25.078Z",
+              "body": "{\n    \"message\": \"Forbidden resource\",\n    \"error\": \"Forbidden\",\n    \"statusCode\": 403\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /tenants/:id - Get tenant by id",
+          "id": "4d249dca-3b29-487e-8b49-7efe62bc10b6",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "45790ba4-8614-46e7-bc58-63004a752186",
+                  "description": "Tenant UUID"
+                }
+              ]
+            },
+            "description": "Get tenant by id"
+          },
+          "response": [
+            {
+              "id": "c510511b-858d-4cd8-b61f-0aad9d91093e",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/tenants/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "45790ba4-8614-46e7-bc58-63004a752186",
+                      "description": "Tenant UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T13:22:49.035Z",
+              "body": "{\n    \"id\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n    \"name\": \"ThunderCats Lair\",\n    \"slug\": \"thundercats-lair\",\n    \"status\": \"ACTIVE\",\n    \"config\": {\n        \"public\": {},\n        \"private\": {\n            \"activeIntegrations\": []\n        }\n    },\n    \"mfaRequired\": false,\n    \"enabledAuthProviders\": [\n        \"password\"\n    ],\n    \"createdAt\": \"2026-02-16T12:23:10.846Z\",\n    \"updatedAt\": \"2026-02-16T12:23:10.846Z\",\n    \"deletedAt\": null\n}"
+            },
+            {
+              "id": "d7fa48f7-76f7-40e8-8cda-5acd0a8a8b79",
+              "name": "403 - Forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/tenants/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "8dd0c31f-d310-462c-a7e0-6d8f61f3fd84",
+                      "description": "Tenant UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T13:21:00.233Z",
+              "body": "{\n    \"message\": \"You do not have access to this tenant resource\",\n    \"error\": \"Forbidden\",\n    \"statusCode\": 403\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /tenants/slug/:slug - Get tenant by slug",
+          "id": "501de2a9-bd1e-4804-9679-42db59f8b023",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/slug/:slug",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", "slug", ":slug"],
+              "variable": [
+                {
+                  "key": "slug",
+                  "value": "mushroom-kingdom",
+                  "description": "Tenant slug"
+                }
+              ]
+            },
+            "description": "Get tenant by slug (Public) - Used during login flow"
+          },
+          "response": [
+            {
+              "id": "d4c510e6-b034-433b-bf18-a2f8a7cd39b3",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/tenants/slug/:slug",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants", "slug", ":slug"],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "mushroom-kingdom",
+                      "description": "Tenant slug"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T14:59:17.245Z",
+              "body": "{\n    \"id\": \"8abeb8e8-5b48-4e95-ae06-cdd61daba7ee\",\n    \"name\": \"Mushroom Kingdom\",\n    \"slug\": \"mushroom-kingdom\",\n    \"enabledAuthProviders\": [\n        \"password\"\n    ],\n    \"config\": {\n        \"public\": {}\n    }\n}"
+            },
+            {
+              "id": "856bc0f0-f402-4c0d-9f73-defa0bf4ad39",
+              "name": "404 - Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/tenants/slug/:slug",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants", "slug", ":slug"],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "acme",
+                      "description": "Tenant slug"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T13:21:40.091Z",
+              "body": "{\n    \"message\": \"Tenant with slug \\\"acme\\\" not found\",\n    \"error\": \"Not Found\",\n    \"statusCode\": 404\n}"
+            }
+          ]
+        },
+        {
+          "name": "PATCH /tenants/:id - Update a tenant",
+          "id": "d55a4bde-d06b-4f39-8eed-9aea2ab20f5a",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"John Doe's Workspace\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/tenants/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "20970ce4-888b-47a2-bdae-2c9da0f330c8",
+                  "description": "Tenant UUID"
+                }
+              ]
+            },
+            "description": "Update a tenant"
+          },
+          "response": [
+            {
+              "id": "24dae39a-d7a4-4887-b91f-de26a06d221c",
+              "name": "403 - Forbidden",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/tenants/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "45790ba4-8614-46e7-bc58-63004a752186",
+                      "description": "Tenant UUID"
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-18T20:27:26.662Z",
+              "body": "{\n    \"message\": \"You do not have access to this tenant resource\",\n    \"error\": \"Forbidden\",\n    \"statusCode\": 403\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE /tenants/:id - Delete a tenant",
+          "id": "8e5df335-b64f-4beb-a2b0-bda1ca42e4aa",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "Tenant UUID"
+                }
+              ]
+            },
+            "description": "Delete a tenant (Super Admin only)"
+          },
+          "response": []
+        },
+        {
+          "name": "GET /tenants/check-slug/{slug} - Check if a slug is available",
+          "id": "631a697e-b2ea-425b-a1e5-61a5213db59a",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/tenants/check-slug/:slug",
+              "host": ["{{baseUrl}}"],
+              "path": ["tenants", "check-slug", ":slug"],
+              "query": [
+                {
+                  "key": "",
+                  "value": "",
+                  "type": "text",
+                  "uuid": "f702c0df-05ff-4042-867e-aab294eb321d",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "slug",
+                  "value": "nokoko-labs",
+                  "uuid": "8f94671d-da09-4593-8c3c-8af9ba1838c1"
+                }
+              ]
+            },
+            "description": "Check if a slug is available (Public)"
+          },
+          "response": [
+            {
+              "id": "3c322b4f-be84-41fe-ac6c-066506eea95a",
+              "name": "Available: TRUE",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/tenants/check-slug/:slug",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["tenants", "check-slug", ":slug"],
+                  "variable": [
+                    {
+                      "key": "slug",
+                      "value": "acme",
+                      "uuid": "c81e76ba-6a1b-4dc9-890b-65115f7296b0"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T19:31:17.062Z",
+              "body": "{\n    \"available\": true\n}"
+            }
+          ]
+        }
+      ],
+      "id": "a9dd491e-2629-4f1d-be5e-167cf253c365"
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "POST /users - Create a new user",
+          "id": "c4df0a6b-07f5-49c5-ae47-4e1bd481228c",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"pantro-2@yopmail.com\",\n    \"password\": \"password123\",\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "Create a new user"
+          },
+          "response": [
+            {
+              "id": "711424a9-1519-4950-8131-8bb650d7c012",
+              "name": "201 - Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"\",\n    \"password\": \"\",\n    \"tenantId\": \"\",\n    \"role\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T19:43:19.683Z",
+              "body": null
+            },
+            {
+              "id": "6b8eeb2d-ba52-44fa-a912-50047135a6b2",
+              "name": "403 - Forbidden",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"pantro@yopmail.com\",\n    \"password\": \"password123\",\n    \"tenantId\": \"38763cdf-3451-4ffe-a9d2-60c3c0912abe\",\n    \"role\": \"USER\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users"]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T19:40:50.167Z",
+              "body": "{\n    \"message\": \"Forbidden resource\",\n    \"error\": \"Forbidden\",\n    \"statusCode\": 403\n}"
+            },
+            {
+              "id": "1d255186-e020-4fd0-9c27-3515352c56c7",
+              "name": "409 - Conflict",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"pantro@yopmail.com\",\n    \"password\": \"password123\",\n    \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n    \"role\": \"USER\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users"]
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T19:53:15.565Z",
+              "body": "{\n    \"message\": \"User with email \\\"pantro@yopmail.com\\\" already exists in this tenant\",\n    \"error\": \"Conflict\",\n    \"statusCode\": 409\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /users - Get all users",
+          "id": "ae0e3ec5-3de8-428f-bea0-d6d710bdc454",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"]
+            },
+            "description": "Get all users"
+          },
+          "response": [
+            {
+              "id": "6db66c47-f51d-4503-adf7-47be3de24fd1",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T19:59:12.071Z",
+              "body": "[\n    {\n        \"id\": \"65c09366-f749-485e-85c5-42b9bde92a27\",\n        \"email\": \"snarf@yopmail.com\",\n        \"password\": \"$2a$10$6GZY6DBRQZpBppcRm6lOqeglDhhO4kuVRYZYUI/sSXykj23F9LDUm\",\n        \"emailVerified\": false,\n        \"role\": \"ADMIN\",\n        \"status\": \"ACTIVE\",\n        \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n        \"mfaSecret\": null,\n        \"mfaEnabled\": false,\n        \"mfaBackupCodes\": null,\n        \"createdAt\": \"2026-02-19T19:56:38.158Z\",\n        \"updatedAt\": \"2026-02-19T19:56:38.158Z\",\n        \"deletedAt\": null\n    },\n    {\n        \"id\": \"45aa3261-3138-4a79-aaf8-1d1d0fa5a818\",\n        \"email\": \"pantro@yopmail.com\",\n        \"password\": \"$2a$10$hDjE.Ye0CvDDplulYxzMZuraLEh.iA0DG0zpkLkm3CZx2x.Y3ELgm\",\n        \"emailVerified\": false,\n        \"role\": \"USER\",\n        \"status\": \"ACTIVE\",\n        \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n        \"mfaSecret\": null,\n        \"mfaEnabled\": false,\n        \"mfaBackupCodes\": null,\n        \"createdAt\": \"2026-02-19T19:43:14.477Z\",\n        \"updatedAt\": \"2026-02-19T19:43:14.477Z\",\n        \"deletedAt\": null\n    },\n    {\n        \"id\": \"c9abe750-c39a-40ba-a2f6-212573e8009c\",\n        \"email\": \"matiasgaratortiz@gmail.com\",\n        \"password\": \"$2a$10$f2ttBBhVlEyUUjf1sWcKFOfxoTqBJhh0/W8cRLM//mqQa1r3B.rGy\",\n        \"emailVerified\": false,\n        \"role\": \"ADMIN\",\n        \"status\": \"ACTIVE\",\n        \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n        \"mfaSecret\": null,\n        \"mfaEnabled\": false,\n        \"mfaBackupCodes\": null,\n        \"createdAt\": \"2026-02-16T13:54:19.563Z\",\n        \"updatedAt\": \"2026-02-16T13:54:19.563Z\",\n        \"deletedAt\": null\n    },\n    {\n        \"id\": \"7b20f6d1-e2f3-463d-b142-a10e9d01f0a5\",\n        \"email\": \"venkman@ghostbusters.com\",\n        \"password\": \"$2a$10$XDVif.KbpQzhfkJ2pgkWoeuHL0doIM5qVsxWQ5U4HXdxhF4ngFq6S\",\n        \"emailVerified\": false,\n        \"role\": \"USER\",\n        \"status\": \"SUSPENDED\",\n        \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n        \"mfaSecret\": null,\n        \"mfaEnabled\": false,\n        \"mfaBackupCodes\": null,\n        \"createdAt\": \"2026-02-16T12:23:10.857Z\",\n        \"updatedAt\": \"2026-02-16T12:23:10.857Z\",\n        \"deletedAt\": null\n    },\n    {\n        \"id\": \"1f1c5b89-7f02-46a7-807f-245476a6d338\",\n        \"email\": \"cheetara@thundercats.org\",\n        \"password\": \"$2a$10$XDVif.KbpQzhfkJ2pgkWoeuHL0doIM5qVsxWQ5U4HXdxhF4ngFq6S\",\n        \"emailVerified\": false,\n        \"role\": \"USER\",\n        \"status\": \"ACTIVE\",\n        \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n        \"mfaSecret\": null,\n        \"mfaEnabled\": false,\n        \"mfaBackupCodes\": null,\n        \"createdAt\": \"2026-02-16T12:23:10.852Z\",\n        \"updatedAt\": \"2026-02-16T12:23:10.852Z\",\n        \"deletedAt\": null\n    },\n    {\n        \"id\": \"e431d8af-ec39-41df-ad30-01dc59f9cb8f\",\n        \"email\": \"lion-o@thundercats.org\",\n        \"password\": \"$2a$10$XDVif.KbpQzhfkJ2pgkWoeuHL0doIM5qVsxWQ5U4HXdxhF4ngFq6S\",\n        \"emailVerified\": false,\n        \"role\": \"ADMIN\",\n        \"status\": \"ACTIVE\",\n        \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n        \"mfaSecret\": null,\n        \"mfaEnabled\": false,\n        \"mfaBackupCodes\": null,\n        \"createdAt\": \"2026-02-16T12:23:10.849Z\",\n        \"updatedAt\": \"2026-02-16T12:23:10.849Z\",\n        \"deletedAt\": null\n    }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /users/:id - Get a user by ID",
+          "id": "9eaf988d-276a-43aa-a422-6343d23a4284",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Get a user by ID"
+          },
+          "response": [
+            {
+              "id": "9129c237-3a8e-4cb1-8bb7-888e244fae6c",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "e431d8af-ec39-41df-ad30-01dc59f9cb8f",
+                      "description": "User ID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T19:59:56.756Z",
+              "body": "{\n    \"id\": \"e431d8af-ec39-41df-ad30-01dc59f9cb8f\",\n    \"email\": \"lion-o@thundercats.org\",\n    \"password\": \"$2a$10$XDVif.KbpQzhfkJ2pgkWoeuHL0doIM5qVsxWQ5U4HXdxhF4ngFq6S\",\n    \"emailVerified\": false,\n    \"role\": \"ADMIN\",\n    \"status\": \"ACTIVE\",\n    \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n    \"mfaSecret\": null,\n    \"mfaEnabled\": false,\n    \"mfaBackupCodes\": null,\n    \"createdAt\": \"2026-02-16T12:23:10.849Z\",\n    \"updatedAt\": \"2026-02-16T12:23:10.849Z\",\n    \"deletedAt\": null\n}"
+            },
+            {
+              "id": "599c5c30-2382-4820-8e9a-3de4a6024612",
+              "name": "404 - Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "e431d8af-ec39-41df-ad30-01dc59f9cb9f",
+                      "description": "User ID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T19:59:56.756Z",
+              "body": "{\n    \"message\": \"User with id \\\"e431d8af-ec39-41df-ad30-01dc59f9cb9f\\\" not found\",\n    \"error\": \"Not Found\",\n    \"statusCode\": 404\n}"
+            }
+          ]
+        },
+        {
+          "name": "PATCH /users/:id - Update a user",
+          "id": "79a19729-d012-4ac0-9497-64b82622cf9c",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"panthro@thundercats.org\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "45aa3261-3138-4a79-aaf8-1d1d0fa5a818",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Update a user"
+          },
+          "response": [
+            {
+              "id": "e3ec1a96-3958-47de-b607-e8b6a005759e",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"panthro@thundercats.org\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "45aa3261-3138-4a79-aaf8-1d1d0fa5a818",
+                      "description": "User ID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T20:25:05.834Z",
+              "body": "{\n    \"id\": \"45aa3261-3138-4a79-aaf8-1d1d0fa5a818\",\n    \"email\": \"panthro@thundercats.org\",\n    \"password\": \"$2a$10$hDjE.Ye0CvDDplulYxzMZuraLEh.iA0DG0zpkLkm3CZx2x.Y3ELgm\",\n    \"emailVerified\": false,\n    \"role\": \"USER\",\n    \"status\": \"ACTIVE\",\n    \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n    \"mfaSecret\": null,\n    \"mfaEnabled\": false,\n    \"mfaBackupCodes\": null,\n    \"createdAt\": \"2026-02-19T19:43:14.477Z\",\n    \"updatedAt\": \"2026-02-19T20:24:52.232Z\",\n    \"deletedAt\": null\n}"
+            },
+            {
+              "id": "42fbb343-6a06-47a8-9ef1-c37a0df52c0a",
+              "name": "404 - Not found",
+              "originalRequest": {
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"email\": \"panthro@thundercats.org\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/users/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "45aa3261-3138-4a79-aaf8-1d1d0fa5a810",
+                      "description": "User ID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T20:25:05.834Z",
+              "body": "{\n    \"message\": \"User with id \\\"45aa3261-3138-4a79-aaf8-1d1d0fa5a810\\\" not found\",\n    \"error\": \"Not Found\",\n    \"statusCode\": 404\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE /users/:id - Delete a user",
+          "id": "0b666f05-2b32-4dd9-85fd-e7a0afc3a0c8",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "65c09366-f749-485e-85c5-42b9bde92a27",
+                  "description": "User ID"
+                }
+              ]
+            },
+            "description": "Delete a user"
+          },
+          "response": [
+            {
+              "id": "2bc6ae10-0e06-47ab-ba0e-6b1714bdf13d",
+              "name": "200 - Success",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "65c09366-f749-485e-85c5-42b9bde92a27",
+                      "description": "User ID"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T20:26:42.277Z",
+              "body": "{\n    \"id\": \"65c09366-f749-485e-85c5-42b9bde92a27\",\n    \"email\": \"snarf@yopmail.com\",\n    \"password\": \"$2a$10$6GZY6DBRQZpBppcRm6lOqeglDhhO4kuVRYZYUI/sSXykj23F9LDUm\",\n    \"emailVerified\": false,\n    \"role\": \"ADMIN\",\n    \"status\": \"DELETED\",\n    \"tenantId\": \"45790ba4-8614-46e7-bc58-63004a752186\",\n    \"mfaSecret\": null,\n    \"mfaEnabled\": false,\n    \"mfaBackupCodes\": null,\n    \"createdAt\": \"2026-02-19T19:56:38.158Z\",\n    \"updatedAt\": \"2026-02-19T20:26:33.041Z\",\n    \"deletedAt\": \"2026-02-19T20:26:33.039Z\"\n}"
+            },
+            {
+              "id": "b83de3d1-99c9-40e9-b02f-26b0df071f78",
+              "name": "404 - Not found",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/users/:id",
+                  "host": ["{{baseUrl}}"],
+                  "path": ["users", ":id"],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "65c09366-f749-485e-85c5-42b9bde92a27",
+                      "description": "User ID"
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "responseTime": "2026-02-19T20:26:42.277Z",
+              "body": "{\n    \"message\": \"User with id \\\"65c09366-f749-485e-85c5-42b9bde92a27\\\" not found\",\n    \"error\": \"Not Found\",\n    \"statusCode\": 404\n}"
+            }
+          ]
+        }
+      ],
+      "id": "d9c5fc31-6a13-4a3a-9933-0a183d258670"
+    },
+    {
+      "name": "Get Google Id Token",
+      "id": "02df20fb-e1fe-4257-8095-fd38989ec56c",
+      "request": {
+        "auth": {
+          "type": "oauth2",
+          "oauth2": [
+            {
+              "key": "useBrowser",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "key": "tokenType",
+              "value": "Bearer",
+              "type": "string"
+            },
+            {
+              "key": "scope",
+              "value": "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
+              "type": "string"
+            },
+            {
+              "key": "clientId",
+              "value": "{{GOOGLE_CLIENT_ID}}",
+              "type": "string"
+            },
+            {
+              "key": "clientSecret",
+              "value": "{{GOOGLE_CLIENT_SECRET}}",
+              "type": "string"
+            },
+            {
+              "key": "accessTokenUrl",
+              "value": "https://oauth2.googleapis.com/token",
+              "type": "string"
+            },
+            {
+              "key": "authUrl",
+              "value": "https://accounts.google.com/o/oauth2/auth",
+              "type": "string"
+            },
+            {
+              "key": "redirect_uri",
+              "value": "https://oauth.pstmn.io/v1/browser-callback",
+              "type": "string"
+            },
+            {
+              "key": "tokenName",
+              "value": "Google Auth",
+              "type": "string"
+            },
+            {
+              "key": "addTokenTo",
+              "value": "header",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": ""
+        }
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "id": "b6f1c187-59ee-48a0-93b4-40b613673304",
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    }
+  ]
+}
