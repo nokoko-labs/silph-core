@@ -5,6 +5,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -18,13 +19,14 @@ import {
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { ZodValidationPipe } from 'nestjs-zod';
+import { AllowSelectionToken } from '@/common/decorators/allow-selection-token.decorator';
 import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth.guard';
 import { OwnershipGuard } from '@/common/guards/ownership.guard';
 import { RolesGuard } from '@/common/guards/roles.guard';
-import { JwtPayload } from '@/modules/auth/auth.service';
+import type { JwtPayload, JwtPayloadOrSelection } from '@/modules/auth/auth.service';
 import { AdminTenantResponseDto } from './dto/admin-tenant-response.dto';
 import { CheckSlugResponseDto } from './dto/check-slug-response.dto';
 import { CreateTenantDto, CreateTenantSchema } from './dto/create-tenant.dto';
@@ -94,12 +96,16 @@ export class TenantsController {
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  @AllowSelectionToken()
+  @Roles(Role.USER, Role.ADMIN, Role.SUPER_ADMIN)
   @ApiBearerAuth('BearerAuth')
+  @Header('Cache-Control', 'no-cache, no-store, must-revalidate')
+  @Header('Pragma', 'no-cache')
+  @Header('Expires', '0')
   @ApiOperation({
     summary: 'List tenants (paginated)',
     description:
-      'SUPER_ADMIN: all tenants. ADMIN: only their own tenant. Supports pagination, filtering by status, and sorting.',
+      'Accepts full JWT or selection token (no tenantId). SUPER_ADMIN: all tenants. Others: tenants where user has membership (by email, bypassTenantId).',
   })
   @ApiResponse({
     status: 200,
@@ -109,7 +115,7 @@ export class TenantsController {
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async findAll(
-    @CurrentUser() user: JwtPayload,
+    @CurrentUser() user: JwtPayloadOrSelection,
     @Query() query: FindAllTenantsQueryDto,
   ): Promise<PaginatedTenantsResponseDto> {
     return this.tenantsService.findAll(user, query);

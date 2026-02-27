@@ -2,13 +2,14 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   PreconditionFailedException,
 } from '@nestjs/common';
 import { Prisma, Role, Tenant } from '@prisma/client';
 import { buildPaginationMeta } from '@/common/dto/pagination.dto';
 import { PrismaService } from '@/database/prisma.service';
-import { JwtPayload } from '@/modules/auth/auth.service';
+import type { JwtPayload, JwtPayloadOrSelection } from '@/modules/auth/auth.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import type { FindAllTenantsQuery } from './dto/find-all-tenants-query.dto';
 import type { PaginatedTenantsResponse } from './dto/paginated-tenants-response.dto';
@@ -24,6 +25,8 @@ type TenantConfig = {
 
 @Injectable()
 export class TenantsService {
+  private readonly logger = new Logger(TenantsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateTenantDto): Promise<Tenant> {
@@ -46,29 +49,85 @@ export class TenantsService {
 
   /**
    * List tenants with pagination, filtering and sorting.
-   * CRITICAL: Only SUPER_ADMIN sees all tenants; ADMIN (and non–super-admin) see only their own tenant.
+   * Accepts full JWT or selection token (no tenantId); uses currentUser.email and bypassTenantId for non–SUPER_ADMIN.
+   * CRITICAL: Only SUPER_ADMIN sees all tenants; others see tenants where they have membership (by email).
    */
   async findAll(
-    currentUser: JwtPayload,
+    currentUser: JwtPayloadOrSelection,
     query: FindAllTenantsQuery,
   ): Promise<PaginatedTenantsResponse> {
     const { page, limit, status, sortBy, sortOrder } = query;
 
     const where: Prisma.TenantWhereInput = { deletedAt: null };
-    if (currentUser.role !== Role.SUPER_ADMIN) {
-      where.id = currentUser.tenantId;
-    }
-    if (status != null) where.status = status;
 
-    const [data, total] = await Promise.all([
+    // SUPER_ADMIN sees everything (selection token has no role, so this is false)
+    if ('role' in currentUser && currentUser.role === Role.SUPER_ADMIN) {
+      if (status != null) where.status = status;
+
+      const [data, total] = await Promise.all([
+        this.prisma.tenant.findMany({
+          where,
+          orderBy: { [sortBy]: sortOrder },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        this.prisma.tenant.count({ where }),
+      ]);
+
+      const meta = buildPaginationMeta(total, page, limit);
+      return {
+        data: data.map((t) => ({ ...t, userRole: Role.SUPER_ADMIN })),
+        meta,
+      };
+    }
+
+    // Regular users (ADMIN/USER): tenants donde tienen membresía (por email). Bypass de tenantId vía where.bypassTenantId.
+    const tenantWhere: Prisma.TenantWhereInput & { bypassTenantId?: boolean } = {
+      deletedAt: null,
+      status: status ?? 'ACTIVE',
+      users: {
+        some: {
+          email: currentUser.email,
+          deletedAt: null,
+          status: { in: ['ACTIVE', 'PENDING'] },
+        },
+      },
+      bypassTenantId: true,
+    };
+
+    // Debug: if these logs never appear, login may have redirected to dashboard (multi-tenant users must hit select-tenant first)
+    const nodeEnv = process.env.NODE_ENV ?? 'dev';
+    if (nodeEnv === 'dev') {
+      this.logger.debug(
+        `findAll findMany where (bypassTenantId): ${JSON.stringify({ ...tenantWhere, bypassTenantId: true })}`,
+      );
+    }
+
+    const [tenants, total] = await Promise.all([
       this.prisma.tenant.findMany({
-        where,
+        where: tenantWhere,
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
         take: limit,
+        include: {
+          users: {
+            where: { email: currentUser.email },
+            select: { role: true },
+            take: 1,
+          },
+        },
       }),
-      this.prisma.tenant.count({ where }),
+      this.prisma.tenant.count({ where: tenantWhere }),
     ]);
+
+    if (nodeEnv === 'dev') {
+      this.logger.debug(`findAll resultados para email=${currentUser.email}: ${total} tenant(s)`);
+    }
+
+    const data = tenants.map(({ users, ...tenant }) => ({
+      ...tenant,
+      userRole: (users[0]?.role ?? Role.USER) as Role,
+    }));
 
     const meta = buildPaginationMeta(total, page, limit);
     return { data, meta };
@@ -136,10 +195,13 @@ export class TenantsService {
       throw new NotFoundException(`Tenant with slug "${slug}" not found or is not active`);
     }
 
-    // Explicitly select only the 'public' key from config
+    // Explicitly select only the 'public' key from config; expose provider flags for frontend
     const config = tenant.config as unknown as TenantConfig;
+    const providers = tenant.enabledAuthProviders ?? [];
     return {
       ...tenant,
+      googleAuthEnabled: providers.includes('google'),
+      githubAuthEnabled: providers.includes('github'),
       config: {
         public: config?.public || {},
       },

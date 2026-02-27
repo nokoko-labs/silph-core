@@ -90,7 +90,10 @@ describe('TenantsService', () => {
         defaultQuery,
       );
 
-      expect(result).toEqual({ data: [mockTenant], meta: { total: 1, page: 1, lastPage: 1 } });
+      expect(result).toEqual({
+        data: [{ ...mockTenant, userRole: Role.SUPER_ADMIN }],
+        meta: { total: 1, page: 1, lastPage: 1 },
+      });
       expect(prisma.tenant.findMany).toHaveBeenCalledWith({
         where: { deletedAt: null },
         orderBy: { createdAt: 'desc' },
@@ -100,18 +103,28 @@ describe('TenantsService', () => {
       expect(prisma.tenant.count).toHaveBeenCalledWith({ where: { deletedAt: null } });
     });
 
-    it('should restrict to own tenant for non-SUPER_ADMIN', async () => {
-      mockPrisma.tenant.findMany.mockResolvedValue([mockTenant]);
+    it('should restrict to tenants where user has membership for non-SUPER_ADMIN', async () => {
+      const tenantWithUsers = { ...mockTenant, users: [{ role: Role.ADMIN }] };
+      mockPrisma.tenant.findMany.mockResolvedValue([tenantWithUsers]);
       mockPrisma.tenant.count.mockResolvedValue(1);
 
-      await service.findAll(
+      const result = await service.findAll(
         { sub: 'u', email: 'a@b.com', role: Role.ADMIN, tenantId: mockTenant.id, status: 'ACTIVE' },
         defaultQuery,
       );
 
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toMatchObject({ ...mockTenant, userRole: Role.ADMIN });
       expect(prisma.tenant.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { deletedAt: null, id: mockTenant.id },
+          where: expect.objectContaining({
+            deletedAt: null,
+            status: 'ACTIVE',
+            users: {
+              some: { email: 'a@b.com', deletedAt: null, status: { in: ['ACTIVE', 'PENDING'] } },
+            },
+            bypassTenantId: true,
+          }),
         }),
       );
     });
