@@ -595,7 +595,7 @@ export class AuthService {
   ): Promise<LoginResult> {
     // Lógica de membresías: antes de firmar el JWT, verificar cuántos tenants tiene el usuario.
     // Si tiene más de uno, NUNCA emitir JWT con tenantId; devolver needsSelection + accessToken sin tenantId + tenants.
-    const memberships = await this.getMembershipsForEmail(user.email);
+    const memberships = (await this.getMembershipsForEmail(user.email)) ?? [];
     if (memberships.length > 1) {
       return this.createTenantSelectionResponse(memberships);
     }
