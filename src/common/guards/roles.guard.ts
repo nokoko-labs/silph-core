@@ -1,7 +1,8 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
-import { JwtPayload } from '@/modules/auth/auth.service';
+import type { JwtPayload, SelectionJwtPayload } from '@/modules/auth/auth.service';
+import { ALLOW_SELECTION_TOKEN_KEY } from '../decorators/allow-selection-token.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
 @Injectable()
@@ -9,6 +10,23 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
+    const allowSelectionToken = this.reflector.getAllAndOverride<boolean>(
+      ALLOW_SELECTION_TOKEN_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    const { user } = context
+      .switchToHttp()
+      .getRequest<{ user: JwtPayload | SelectionJwtPayload }>();
+
+    if (!user || !user.sub || !user.email) {
+      return false;
+    }
+
+    // Route allows selection token (e.g. GET /tenants): valid token with email is enough
+    if (allowSelectionToken && (!('role' in user) || (user as JwtPayload).role == null)) {
+      return true;
+    }
+
     const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -16,14 +34,13 @@ export class RolesGuard implements CanActivate {
     if (!requiredRoles) {
       return true;
     }
-    const { user } = context.switchToHttp().getRequest<{ user: JwtPayload }>();
-    if (!user || !user.role) {
+    const payload = user as JwtPayload;
+    if (!payload.role) {
       return false;
     }
-    // SUPER_ADMIN has access to all roles
-    if (user.role === Role.SUPER_ADMIN) {
+    if (payload.role === Role.SUPER_ADMIN) {
       return true;
     }
-    return requiredRoles.some((role) => user.role === role);
+    return requiredRoles.some((role) => payload.role === role);
   }
 }

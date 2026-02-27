@@ -1,6 +1,8 @@
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
+import { ALLOW_SELECTION_TOKEN_KEY } from '../decorators/allow-selection-token.decorator';
+import { ROLES_KEY } from '../decorators/roles.decorator';
 import { RolesGuard } from './roles.guard';
 
 describe('RolesGuard', () => {
@@ -17,13 +19,15 @@ describe('RolesGuard', () => {
   });
 
   it('should return true if no roles are required', () => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(null);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key) => (key === ROLES_KEY ? null : undefined));
 
     const context = {
       getHandler: () => ({}),
       getClass: () => ({}),
       switchToHttp: () => ({
-        getRequest: () => ({}),
+        getRequest: () => ({ user: { sub: '1', email: 'u@e.com', role: Role.USER } }),
       }),
     } as unknown as ExecutionContext;
 
@@ -31,14 +35,50 @@ describe('RolesGuard', () => {
   });
 
   it('should return false if no user is present in request', () => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.ADMIN]);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key) => (key === ROLES_KEY ? [Role.ADMIN] : undefined));
+
+    const context = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({
+        getRequest: () => ({ user: null }),
+      }),
+    } as unknown as ExecutionContext;
+
+    expect(guard.canActivate(context)).toBe(false);
+  });
+
+  it('should return false if user has no sub or email', () => {
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key) => (key === ROLES_KEY ? [Role.ADMIN] : undefined));
+
+    const context = {
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({
+        getRequest: () => ({ user: { role: Role.USER } }),
+      }),
+    } as unknown as ExecutionContext;
+
+    expect(guard.canActivate(context)).toBe(false);
+  });
+
+  it('should return false if user has no role and route does not allow selection token', () => {
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key) =>
+        key === ALLOW_SELECTION_TOKEN_KEY ? false : key === ROLES_KEY ? [Role.ADMIN] : undefined,
+      );
 
     const context = {
       getHandler: () => ({}),
       getClass: () => ({}),
       switchToHttp: () => ({
         getRequest: () => ({
-          user: null,
+          user: { sub: '1', email: 'u@e.com', role: null },
         }),
       }),
     } as unknown as ExecutionContext;
@@ -46,31 +86,37 @@ describe('RolesGuard', () => {
     expect(guard.canActivate(context)).toBe(false);
   });
 
-  it('should return false if user has no role', () => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.ADMIN]);
+  it('should return true if route allows selection token and user has email but no role', () => {
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key) =>
+        key === ALLOW_SELECTION_TOKEN_KEY ? true : key === ROLES_KEY ? [Role.ADMIN] : undefined,
+      );
 
     const context = {
       getHandler: () => ({}),
       getClass: () => ({}),
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { role: null },
+          user: { sub: '1', email: 'u@e.com' },
         }),
       }),
     } as unknown as ExecutionContext;
 
-    expect(guard.canActivate(context)).toBe(false);
+    expect(guard.canActivate(context)).toBe(true);
   });
 
   it('should return true if user is SUPER_ADMIN', () => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.ADMIN]);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key) => (key === ROLES_KEY ? [Role.ADMIN] : undefined));
 
     const context = {
       getHandler: () => ({}),
       getClass: () => ({}),
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { role: Role.SUPER_ADMIN },
+          user: { sub: '1', email: 'u@e.com', role: Role.SUPER_ADMIN },
         }),
       }),
     } as unknown as ExecutionContext;
@@ -79,14 +125,16 @@ describe('RolesGuard', () => {
   });
 
   it('should return true if user role matches one of the required roles', () => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.ADMIN, Role.USER]);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key) => (key === ROLES_KEY ? [Role.ADMIN, Role.USER] : undefined));
 
     const context = {
       getHandler: () => ({}),
       getClass: () => ({}),
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { role: Role.USER },
+          user: { sub: '1', email: 'u@e.com', role: Role.USER },
         }),
       }),
     } as unknown as ExecutionContext;
@@ -95,14 +143,16 @@ describe('RolesGuard', () => {
   });
 
   it('should return false if user role does not match any of the required roles', () => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([Role.ADMIN]);
+    jest
+      .spyOn(reflector, 'getAllAndOverride')
+      .mockImplementation((key) => (key === ROLES_KEY ? [Role.ADMIN] : undefined));
 
     const context = {
       getHandler: () => ({}),
       getClass: () => ({}),
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { role: Role.USER },
+          user: { sub: '1', email: 'u@e.com', role: Role.USER },
         }),
       }),
     } as unknown as ExecutionContext;
