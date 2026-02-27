@@ -12,16 +12,28 @@ export const TenantItemSchema = z.object({
 
 /**
  * Response when user belongs to multiple tenants.
- * Contains list of tenants and a short-lived tempToken for select-tenant step.
+ * access_token is a selection JWT (sub + email, no tenantId). Frontend redirects to /select-tenant?token=access_token.
+ * suggestedTenant is set when login body included tenantSlug or tenantId and that tenant is in the user's list.
  */
 export const TenantSelectionResponseSchema = z.object({
+  access_token: z
+    .string()
+    .describe(
+      'Selection JWT (sub + email, no tenantId); use as Bearer or send in POST /auth/select-tenant',
+    ),
+  needsSelection: z
+    .literal(true)
+    .describe('Flag indicating tenant selection is required; redirect to /select-tenant?token=...'),
+  suggestedTenant: z
+    .string()
+    .optional()
+    .describe(
+      'Tenant slug to pre-select when login came from a tenant-specific form (tenantSlug/tenantId in body)',
+    ),
   tenants: z
     .array(TenantItemSchema)
     .min(2)
     .describe('List of tenants the user belongs to; client must show selection UI'),
-  tempToken: z
-    .string()
-    .describe('Short-lived JWT (5 min) to exchange for final JWT via POST /auth/select-tenant'),
 });
 
 export type TenantSelectionResponsePayload = z.infer<typeof TenantSelectionResponseSchema>;

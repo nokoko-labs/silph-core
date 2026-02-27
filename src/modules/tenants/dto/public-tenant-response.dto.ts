@@ -10,6 +10,8 @@ export const PublicTenantResponseSchema = z.object({
   name: z.string().describe('Display name'),
   slug: z.string().describe('URL-friendly identifier'),
   enabledAuthProviders: z.array(z.string()).describe('List of enabled authentication providers'),
+  googleAuthEnabled: z.boolean().describe('Whether Google OAuth is enabled for this tenant'),
+  githubAuthEnabled: z.boolean().describe('Whether GitHub OAuth is enabled for this tenant'),
   config: z
     .object({
       public: z.record(z.any()).describe('Publicly accessible configuration'),

@@ -3,10 +3,15 @@ import { z } from 'zod';
 
 /**
  * Schema for POST /auth/select-tenant body.
- * Receives tempToken from login (multi-tenant flow) and the chosen tenantId.
+ * Receives selection token (access_token from login) or legacy tempToken, and the chosen tenantId.
  */
 export const selectTenantSchema = z.object({
-  tempToken: z.string().min(1).describe('Short-lived token from login tenant-selection response'),
+  tempToken: z
+    .string()
+    .min(1)
+    .describe(
+      'Selection JWT (access_token from login) or legacy tempToken; exchange with tenantId for final JWT',
+    ),
   tenantId: z.string().uuid().describe('Tenant UUID selected by the user'),
 });
 

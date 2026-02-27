@@ -1,4 +1,4 @@
-import { TenantStatus } from '@prisma/client';
+import { Role, TenantStatus } from '@prisma/client';
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
 
@@ -16,6 +16,7 @@ export const TenantResponseSchema = z.object({
   enabledAuthProviders: z.array(z.string()).describe('List of enabled authentication providers'),
   createdAt: z.date().describe('Creation timestamp'),
   updatedAt: z.date().describe('Last update timestamp'),
+  userRole: z.nativeEnum(Role).optional().describe('Role of the current user in this tenant'),
 });
 
 export type TenantResponsePayload = z.infer<typeof TenantResponseSchema>;

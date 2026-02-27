@@ -11,8 +11,13 @@ export class TenantInterceptor implements NestInterceptor {
     const user = request.user;
 
     if (user) {
-      this.cls.set('tenantId', user.tenantId);
-      this.cls.set('role', user.role);
+      // Selection token may have no tenantId; set CLS only when present
+      if (user.tenantId != null) {
+        this.cls.set('tenantId', user.tenantId);
+      }
+      if (user.role != null) {
+        this.cls.set('role', user.role);
+      }
     }
 
     return next.handle();
