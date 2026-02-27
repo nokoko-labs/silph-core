@@ -62,11 +62,14 @@ export class MailService {
     }
   }
 
-  async sendResetPasswordEmail(email: string, token: string, tenantId?: string) {
-    const resetUrl = `${this.configService.get<string>(
-      'FRONTEND_URL',
-      'http://localhost:3000',
-    )}/reset-password?token=${token}`;
+  async sendResetPasswordEmail(
+    email: string,
+    token: string,
+    tenantSlug: string,
+    tenantId?: string,
+  ) {
+    const baseUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+    const resetUrl = `${baseUrl}/${tenantSlug}/reset-password?token=${token}`;
 
     const subject = 'Password Reset Request';
     const html = `<p>To reset your password, please click on the following link:</p><a href="${resetUrl}">${resetUrl}</a>`;
