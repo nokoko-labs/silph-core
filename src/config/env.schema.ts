@@ -17,6 +17,10 @@ export const envSchema = Joi.object({
   GOOGLE_CALLBACK_URL: Joi.string().uri().optional().allow(''),
   OAUTH_DEFAULT_TENANT_ID: Joi.string().uuid().optional().allow(''),
   OAUTH_SUCCESS_REDIRECT_URL: Joi.string().uri().optional().allow(''),
+  /** Base URL for OAuth success redirect (e.g. http://localhost:3001). Used to build /auth/callback?token=...&tenantSlug=... */
+  FRONTEND_URL: Joi.string().uri().optional().allow(''),
   ALLOWED_OAUTH_REDIRECT_DOMAINS: Joi.string().default(''),
   OAUTH_CODE_EXPIRES_IN: Joi.number().integer().positive().default(60),
+  /** Base URL for OAuth error redirects (e.g. http://localhost:3001). Falls back to FRONTEND_URL. */
+  OAUTH_ERROR_REDIRECT_BASE_URL: Joi.string().uri().optional().allow(''),
 });

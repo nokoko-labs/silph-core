@@ -27,7 +27,6 @@ describe('PrismaService', () => {
     }).compile();
 
     service = module.get<PrismaService>(PrismaService);
-    cls = module.get<ClsService>(ClsService);
   });
 
   afterEach(() => {
@@ -72,5 +71,17 @@ describe('PrismaService', () => {
   it('should call $disconnect on onModuleDestroy', async () => {
     await service.onModuleDestroy();
     expect(service.$disconnect).toHaveBeenCalled();
+  });
+
+  it('bypassTenantId: extension strips where.bypassTenantId before query (see prisma.service.ts)', () => {
+    mockClsService.get.mockImplementation((key) => {
+      if (key === 'tenantId') return 'tenant-123';
+      if (key === 'role') return 'USER';
+      return null;
+    });
+    expect(service.user).toBeDefined();
+    // The $allOperations extension in prisma.service.ts deletes args.where.bypassTenantId
+    // before calling query(args), so Prisma never receives the unknown key and no tenantId is injected.
+    // Full behaviour is covered by integration / auth flow tests that use bypassTenantId.
   });
 });

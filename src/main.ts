@@ -47,6 +47,7 @@ async function bootstrap() {
   });
 
   app.enableCors();
+  app.getHttpAdapter().getInstance().set('etag', false);
   // main.ts
   // app.enableCors({
   //   origin: 'http://localhost:3001', // Tu frontend

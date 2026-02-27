@@ -3,12 +3,18 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { ClsService } from 'nestjs-cls';
 
+/** Props that must be delegated to the base client so $on (logging) and lifecycle work. */
+const BASE_CLIENT_PROPS = new Set(['$on', '$connect', '$disconnect', '$transaction']);
+
 @Injectable()
 export class PrismaService
   extends PrismaClient<Prisma.PrismaClientOptions, 'query' | 'info' | 'warn' | 'error'>
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
+
+  /** Extended client with tenant-scoping; model access is delegated here. */
+  private readonly _extendedClient: ReturnType<PrismaClient['$extends']>;
 
   constructor(
     private readonly configService: ConfigService,
@@ -23,98 +29,130 @@ export class PrismaService
       ],
     });
 
-    // biome-ignore lint/suspicious/noExplicitAny: extension return type is complex
-    const client: any = this.$extends({
+    this.setupLogging();
+
+    const isDev = this.configService.get<string>('NODE_ENV', 'dev') === 'dev';
+
+    this._extendedClient = this.$extends({
       query: {
         $allModels: {
           async $allOperations({ model, operation, args, query }) {
-            const tenantId = cls.get<string>('tenantId');
-            const role = cls.get<string>('role');
+            const start = Date.now();
+            const operationsWithWhere = [
+              'findMany',
+              'findFirst',
+              'findUnique',
+              'update',
+              'updateMany',
+              'delete',
+              'deleteMany',
+              'count',
+              'aggregate',
+              'groupBy',
+              'upsert',
+            ];
 
-            // List of models that have a tenantId field
-            const modelsWithTenantId = ['User'];
-
-            if (tenantId && role !== 'SUPER_ADMIN' && modelsWithTenantId.includes(model)) {
+            // 1) Bypass: if args.where.bypassTenantId === true, strip it from the where object BEFORE calling query.
+            // Prisma would throw on unknown 'bypassTenantId'; and we must not inject CLS tenantId for this call.
+            // Vital for GET /tenants and login (validateUserForTenants / getMembershipsForEmail) when token has no tenant yet.
+            let bypassTenantId = false;
+            if (operationsWithWhere.includes(operation)) {
               // biome-ignore lint/suspicious/noExplicitAny: dynamic args handling
               const dynamicArgs = args as any;
-              // Intercept all read and write operations that use a 'where' clause
-              const operationsWithWhere = [
-                'findMany',
-                'findFirst',
-                'findUnique',
-                'update',
-                'updateMany',
-                'delete',
-                'deleteMany',
-                'count',
-                'aggregate',
-                'groupBy',
-                'upsert',
-              ];
-
-              if (operationsWithWhere.includes(operation)) {
-                dynamicArgs.where = dynamicArgs.where || {};
-
-                // Only inject tenantId if it's not already explicitly provided.
-                // This allows authorized "cross-tenant" queries (like in switch-tenant)
-                // while maintaining isolation by default.
-                if (dynamicArgs.where.tenantId === undefined) {
-                  dynamicArgs.where.tenantId = tenantId;
-                }
-
-                // For findUnique, we must convert it to findFirst because adding tenantId
-                // might break the unique constraint requirement in the where clause
-                if (operation === 'findUnique') {
-                  const context = Prisma.getExtensionContext(this);
-                  // biome-ignore lint/suspicious/noExplicitAny: dynamic model delegation
-                  const modelDelegate = (context as any)[
-                    model.charAt(0).toLowerCase() + model.slice(1)
-                  ];
-                  if (modelDelegate?.findFirst) {
-                    return modelDelegate.findFirst(args);
-                  }
-                }
-              }
-
-              // For create, ensure tenantId is set if not provided
-              if (operation === 'create') {
-                dynamicArgs.data = dynamicArgs.data || {};
-                if (dynamicArgs.data.tenantId === undefined) {
-                  dynamicArgs.data.tenantId = tenantId;
-                }
-              }
-
-              // For createMany, ensure tenantId is set for all records if not provided
-              if (operation === 'createMany') {
-                if (Array.isArray(dynamicArgs.data)) {
-                  for (const item of dynamicArgs.data) {
-                    if (item.tenantId === undefined) {
-                      item.tenantId = tenantId;
-                    }
-                  }
-                } else if (dynamicArgs.data && dynamicArgs.data.tenantId === undefined) {
-                  dynamicArgs.data.tenantId = tenantId;
-                }
+              dynamicArgs.where = dynamicArgs.where || {};
+              if (dynamicArgs.where.bypassTenantId === true) {
+                bypassTenantId = true;
+                // Eliminar la propiedad antes de ejecutar la consulta para que Prisma no reciba un arg desconocido
+                // biome-ignore lint/performance/noDelete: must remove key so Prisma does not receive unknown arg
+                delete dynamicArgs.where.bypassTenantId;
               }
             }
 
-            return query(args);
+            let result: unknown;
+            if (bypassTenantId) {
+              result = await query(args);
+            } else {
+              const tenantId = cls.get<string>('tenantId');
+              const role = cls.get<string>('role');
+              const modelsWithTenantId = ['User'];
+
+              if (tenantId && role !== 'SUPER_ADMIN' && modelsWithTenantId.includes(model)) {
+                // biome-ignore lint/suspicious/noExplicitAny: dynamic args handling
+                const dynamicArgs = args as any;
+
+                if (operationsWithWhere.includes(operation)) {
+                  const isCrossTenantByEmail =
+                    model === 'User' &&
+                    dynamicArgs.where &&
+                    'email' in dynamicArgs.where &&
+                    dynamicArgs.where.tenantId === undefined;
+
+                  if (dynamicArgs.where.tenantId === undefined && !isCrossTenantByEmail) {
+                    dynamicArgs.where.tenantId = tenantId;
+                  }
+
+                  if (operation === 'findUnique') {
+                    const context = Prisma.getExtensionContext(this);
+                    // biome-ignore lint/suspicious/noExplicitAny: dynamic model delegation
+                    const modelDelegate = (context as any)[
+                      model.charAt(0).toLowerCase() + model.slice(1)
+                    ];
+                    if (modelDelegate?.findFirst) {
+                      result = await modelDelegate.findFirst(args);
+                      if (isDev) {
+                        console.log(`[Prisma] ${model}.${operation} ${Date.now() - start}ms`);
+                      }
+                      return result;
+                    }
+                  }
+                }
+
+                if (operation === 'create') {
+                  dynamicArgs.data = dynamicArgs.data || {};
+                  if (dynamicArgs.data.tenantId === undefined) {
+                    dynamicArgs.data.tenantId = tenantId;
+                  }
+                }
+
+                if (operation === 'createMany') {
+                  if (Array.isArray(dynamicArgs.data)) {
+                    for (const item of dynamicArgs.data) {
+                      if (item.tenantId === undefined) {
+                        item.tenantId = tenantId;
+                      }
+                    }
+                  } else if (dynamicArgs.data && dynamicArgs.data.tenantId === undefined) {
+                    dynamicArgs.data.tenantId = tenantId;
+                  }
+                }
+              }
+
+              result = await query(args);
+            }
+
+            if (isDev) {
+              console.log(`[Prisma] ${model}.${operation} ${Date.now() - start}ms`);
+            }
+            return result;
           },
         },
       },
     });
 
-    this.setupLogging();
-
-    // Use a Proxy to delegate all calls to the extended client
-    // This allows the service to still be used as a PrismaClient
+    // Proxy: base client for $on/$connect/$disconnect so logs work; extended client for models
+    const extendedClient = this._extendedClient;
     // biome-ignore lint/correctness/noConstructorReturn: Required for Prisma Client Extensions with Proxy
     return new Proxy(this, {
       get: (target, prop) => {
-        if (prop in client) {
-          return client[prop];
+        if (BASE_CLIENT_PROPS.has(prop as string)) {
+          // biome-ignore lint/suspicious/noExplicitAny: proxy delegation to base
+          return (target as any)[prop];
         }
-        // biome-ignore lint/suspicious/noExplicitAny: proxy delegation
+        if (prop in extendedClient) {
+          // biome-ignore lint/suspicious/noExplicitAny: proxy delegation to extended client
+          return (extendedClient as any)[prop];
+        }
+        // biome-ignore lint/suspicious/noExplicitAny: proxy fallback
         return (target as any)[prop];
       },
     });
@@ -135,13 +173,16 @@ export class PrismaService
     this.logger.log('Database connection closed');
   }
 
+  /**
+   * Base client event handlers. In dev, query events may not fire when using the extended client
+   * via Proxy; use the per-operation log inside $extends as the primary source of query logs.
+   * Temporary: using console.log for query to rule out NestJS logger level blocking output.
+   */
   private setupLogging() {
     this.$on('query', (e: { query: string; params: string; duration: number }) => {
       const nodeEnv = this.configService.get<string>('NODE_ENV', 'dev');
       if (nodeEnv === 'dev') {
-        this.logger.debug(`Query: ${e.query}`);
-        this.logger.debug(`Params: ${e.params}`);
-        this.logger.debug(`Duration: ${e.duration}ms`);
+        console.log(`[Prisma $on] Query: ${e.query} | Params: ${e.params} | ${e.duration}ms`);
       }
     });
 
