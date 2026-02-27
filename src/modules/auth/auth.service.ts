@@ -1052,9 +1052,12 @@ export class AuthService {
    * - If no slug or mismatch, creates a basic Tenant and joins as ADMIN.
    */
   async register(dto: RegisterPayload, ip?: string, userAgent?: string): Promise<LoginResult> {
+    console.log(
+      `[AuthService.register] New registration for: ${dto.email}, Workspace: ${dto.tenantSlug || dto.tenantName}`,
+    );
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    return await this.prisma.$transaction(async (tx) => {
+    const user = await this.prisma.$transaction(async (tx) => {
       let tenantId: string;
       let role: Role = 'USER';
 
@@ -1066,7 +1069,6 @@ export class AuthService {
         if (existingTenant) {
           tenantId = existingTenant.id;
         } else {
-          // If slug provided but not found, create new one with that slug
           const newTenant = await tx.tenant.create({
             data: {
               name: dto.tenantName || `${dto.name}'s Workspace`,
@@ -1078,7 +1080,6 @@ export class AuthService {
           role = 'ADMIN';
         }
       } else {
-        // Solo user: create new tenant with generated slug
         const baseSlug =
           dto.tenantName?.toLowerCase().replace(/\s+/g, '-') ||
           dto.name.toLowerCase().replace(/\s+/g, '-');
@@ -1095,7 +1096,7 @@ export class AuthService {
         role = 'ADMIN';
       }
 
-      const user = await tx.user.create({
+      return await tx.user.create({
         data: {
           email: dto.email,
           password: hashedPassword,
@@ -1104,10 +1105,10 @@ export class AuthService {
           tenantId,
           emailVerified: false,
         },
+        include: { tenant: true },
       });
-
-      // Record login and return JWT
-      return this.login(user, ip, userAgent);
     });
+
+    return this.login(user, ip, userAgent);
   }
 }
