@@ -5,14 +5,14 @@ const tenantSlugForgot = z
   .string()
   .min(1)
   .describe('Tenant slug to identify which tenant account to reset');
-const tenantSlugWithExample =
+const tenantSlugForgotWithExample =
   typeof (tenantSlugForgot as { openapi?: (opts: { example: string }) => unknown }).openapi ===
   'function'
     ? (
         tenantSlugForgot as unknown as {
           openapi: (opts: { example: string }) => typeof tenantSlugForgot;
         }
-      ).openapi({ example: 'acme' })
+      ).openapi({ example: 'ghostbusters-hq' })
     : tenantSlugForgot;
 
 /**
@@ -21,7 +21,7 @@ const tenantSlugWithExample =
  */
 export const forgotPasswordSchema = z.object({
   email: z.string().email().describe('User email address'),
-  tenantSlug: tenantSlugWithExample,
+  tenantSlug: tenantSlugForgotWithExample,
 });
 
 export type ForgotPasswordPayload = z.infer<typeof forgotPasswordSchema>;

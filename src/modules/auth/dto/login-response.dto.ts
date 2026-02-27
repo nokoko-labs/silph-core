@@ -10,6 +10,12 @@ export const LoginResponseSchema = z.object({
     z.string().optional().describe('JWT access token for Bearer authentication'),
     'eyJhbGc...',
   ),
+  tenantSlug: z
+    .string()
+    .optional()
+    .describe(
+      'Tenant slug for initial redirect to /{tenantSlug}/dashboard; always present when access_token is returned',
+    ),
   status: z.string().optional().describe('MFA status (e.g. MFA_REQUIRED)'),
   ticket: z.string().optional().describe('Temporary ticket for MFA verification'),
 });

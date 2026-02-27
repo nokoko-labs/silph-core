@@ -16,14 +16,24 @@ const tenantSlugLoginWithExample =
       ).openapi({ example: 'acme' })
     : tenantSlugLogin;
 
+const tenantIdLogin = z
+  .string()
+  .uuid()
+  .optional()
+  .describe(
+    'Tenant UUID when using a tenant-specific form; used for suggestedTenant in needsSelection response',
+  );
+
 /**
  * Schema for login payload (email + password).
  * Optional tenantSlug enables Direct Tenant Login (single lookup by email+tenantId).
+ * Optional tenantId (or tenantSlug) is echoed as suggestedTenant when needsSelection is true.
  */
 export const loginSchema = z.object({
   email: z.string().email().describe('User email address'),
   password: z.string().min(1).describe('User password'),
   tenantSlug: tenantSlugLoginWithExample,
+  tenantId: tenantIdLogin,
 });
 
 export type LoginPayload = z.infer<typeof loginSchema>;
