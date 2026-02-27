@@ -8,6 +8,7 @@ import {
   Request,
   Res,
   UnauthorizedException,
+  UseFilters,
   UseGuards,
   UsePipes,
 } from '@nestjs/common';
@@ -44,6 +45,7 @@ import {
   selectTenantSchema,
 } from './dto/select-tenant.dto';
 import { TenantSelectionResponseDto } from './dto/tenant-selection-response.dto';
+import { OAuthCallbackExceptionFilter } from './filters/oauth-callback.exception-filter';
 
 @ApiTags('auth')
 @ApiExtraModels(LoginResponseDto, TenantSelectionResponseDto)
@@ -82,6 +84,7 @@ export class AuthController {
       String(payload.email),
       String(payload.password),
       payload.tenantSlug == null ? undefined : String(payload.tenantSlug),
+      payload.tenantId == null ? undefined : String(payload.tenantId),
       req.ip,
       req.headers['user-agent'] as string | undefined,
     );
@@ -90,7 +93,7 @@ export class AuthController {
       return res.status(202).json(result);
     }
 
-    if ('tenants' in result && 'tempToken' in result) {
+    if ('tenants' in result && 'needsSelection' in result && result.needsSelection) {
       return res.status(200).json(result);
     }
 
@@ -103,11 +106,12 @@ export class AuthController {
   @ApiOperation({
     summary: 'Select tenant and complete login',
     description:
-      'Exchanges tempToken (from multi-tenant login) and selected tenantId for the final JWT. Validates that the user belongs to the chosen tenant.',
+      'Exchanges selection token (access_token from multi-tenant login) and selected tenantId for the final JWT. Also accepts legacy tempToken. Validates that the user belongs to the chosen tenant.',
   })
   @ApiBody({
     type: SelectTenantDto,
-    description: 'tempToken from login response and tenantId selected by user',
+    description:
+      'Selection token (access_token) or legacy tempToken from login, and tenantId selected by user',
   })
   @ApiResponse({
     status: 200,
@@ -122,7 +126,7 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid input (e.g. invalid tenantId format)' })
   @ApiResponse({
     status: 401,
-    description: 'Invalid or expired temp token; tenant not in user list',
+    description: 'Invalid or expired token; tenant not in user list',
   })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async selectTenant(
@@ -160,6 +164,7 @@ export class AuthController {
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
+  @UseFilters(OAuthCallbackExceptionFilter)
   @HttpCode(200)
   @ApiOperation({ summary: 'Google OAuth callback; returns JWT or redirects to frontend' })
   @ApiResponse({
@@ -168,13 +173,17 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @ApiResponse({ status: 202, description: 'MFA Required', type: MfaRequiredResponseDto })
-  @ApiResponse({ status: 302, description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL or frontend login on error',
+  })
   @ApiResponse({ status: 401, description: 'Google auth failed or not configured' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  // biome-ignore lint/suspicious/noExplicitAny: req.user is LoginResult from strategy
+  // biome-ignore lint/suspicious/noExplicitAny: req.user is LoginResult from strategy, req.oauthContextState from state store
   async googleAuthCallback(@Request() req: any, @Res() res: Response): Promise<Response> {
     const result = req.user as LoginResult;
-    return this.handleOAuthCallback(result, res) as Promise<Response>;
+    const tenantSlug = req.oauthContextState?.tenantSlug;
+    return this.handleOAuthCallback(result, res, tenantSlug) as Promise<Response>;
   }
 
   @Get('github')
@@ -193,6 +202,7 @@ export class AuthController {
 
   @Get('github/callback')
   @UseGuards(GitHubAuthGuard)
+  @UseFilters(OAuthCallbackExceptionFilter)
   @HttpCode(200)
   @ApiOperation({ summary: 'GitHub OAuth callback; returns JWT or redirects to frontend' })
   @ApiResponse({
@@ -201,18 +211,41 @@ export class AuthController {
     type: LoginResponseDto,
   })
   @ApiResponse({ status: 202, description: 'MFA Required', type: MfaRequiredResponseDto })
-  @ApiResponse({ status: 302, description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirect to OAUTH_SUCCESS_REDIRECT_URL or frontend login on error',
+  })
   @ApiResponse({ status: 401, description: 'GitHub auth failed or not configured' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
-  // biome-ignore lint/suspicious/noExplicitAny: req.user is LoginResult from strategy
+  // biome-ignore lint/suspicious/noExplicitAny: req.user is LoginResult from strategy, req.oauthContextState from state store
   async githubAuthCallback(@Request() req: any, @Res() res: Response): Promise<Response> {
     const result = req.user as LoginResult;
-    return this.handleOAuthCallback(result, res) as Promise<Response>;
+    const tenantSlug = req.oauthContextState?.tenantSlug;
+    return this.handleOAuthCallback(result, res, tenantSlug) as Promise<Response>;
   }
 
-  private async handleOAuthCallback(result: LoginResult, res: Response): Promise<Response> {
-    const redirectUrl = this.authService.getOAuthSuccessRedirectUrl();
+  private async handleOAuthCallback(
+    result: LoginResult,
+    res: Response,
+    _tenantSlug?: string,
+  ): Promise<Response> {
+    const frontendBase = this.authService.getFrontendOAuthRedirectBaseUrl();
 
+    // Blindaje de seguridad: Si no hay un slug válido, forzar redirección al selector
+    if (!_tenantSlug || _tenantSlug === 'undefined' || _tenantSlug === 'null') {
+      const base = frontendBase ?? 'http://localhost:3001';
+      const token = 'access_token' in result ? result.access_token : '';
+      const selectUrl = new URL('/select-tenant', base);
+      if (token) selectUrl.searchParams.set('token', token);
+      return res.redirect(302, selectUrl.toString()) as unknown as Response;
+    }
+
+    if (frontendBase) {
+      const url = await this.authService.buildFrontendRedirectUrl(result);
+      return res.redirect(302, url) as unknown as Response;
+    }
+
+    const redirectUrl = this.authService.getOAuthSuccessRedirectUrl();
     if (redirectUrl) {
       const url = await this.authService.buildOAuthRedirectUrl(result);
       if (url) return res.redirect(302, url) as unknown as Response;
@@ -225,7 +258,7 @@ export class AuthController {
     if ('message' in result && result.message === 'MFA_REQUIRED') {
       return res.status(202).json(result);
     }
-    if ('tenants' in result && 'tempToken' in result) {
+    if ('tenants' in result && 'needsSelection' in result && result.needsSelection) {
       return res.status(200).json(result);
     }
     return res.status(200).json(result);
@@ -243,6 +276,22 @@ export class AuthController {
     return this.authService.exchangeOAuthCode(payload.code, req.ip, req.headers['user-agent']);
   }
 
+  @Public()
+  @Post('logout')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Logout (client-side)',
+    description:
+      'No server-side session. Client must clear the JWT and redirect to the login page using an absolute URL (e.g. FRONTEND_URL/login) to avoid redirect loops. Do not call the API or DB during redirect.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Logged out; client must redirect to absolute login URL',
+  })
+  logout(): { message: string } {
+    return { message: 'Logged out' };
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('BearerAuth')
@@ -252,6 +301,24 @@ export class AuthController {
   @ApiResponse({ status: 500, description: 'Internal server error' })
   getProfile(@CurrentUser() user: JwtPayload): JwtPayload {
     return user;
+  }
+
+  /** DEBUG: Endpoint temporal para verificar persistencia de membresías. Devuelve conteo real por email (sin scope de tenant). */
+  @Get('test-my-tenants')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('BearerAuth')
+  @ApiOperation({
+    summary: '[DEBUG] Count all memberships for current user email',
+    description:
+      'Temporary. Uses raw query to bypass tenant scope. Returns count and tenantIds for the logged-in user email.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '{ count: number, tenantIds: string[] }',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async testMyTenants(@CurrentUser() user: JwtPayload) {
+    return this.authService.getMyTenantsCountForDebug(user.email);
   }
 
   @Post('switch-tenant/:tenantId')

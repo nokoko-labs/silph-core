@@ -7,6 +7,7 @@ import { AuditModule } from '@/modules/audit/audit.module';
 import { MailModule } from '@/modules/mail/mail.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { OAuthCallbackExceptionFilter } from './filters/oauth-callback.exception-filter';
 import { GitHubStrategy } from './strategies/github.strategy';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -33,6 +34,7 @@ import { MfaJwtStrategy } from './strategies/mfa-jwt.strategy';
   controllers: [AuthController],
   providers: [
     AuthService,
+    OAuthCallbackExceptionFilter,
     LocalStrategy,
     JwtStrategy,
     GoogleStrategy,

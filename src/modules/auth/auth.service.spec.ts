@@ -16,6 +16,7 @@ import { PrismaService } from '@/database/prisma.service';
 import { MailService } from '@/modules/mail/mail.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import { AuthService } from './auth.service';
+import { OAuthCallbackRedirectException } from './exceptions/oauth-callback-redirect.exception';
 
 jest.mock('bcryptjs', () => ({
   compare: jest.fn().mockResolvedValue(true),
@@ -92,6 +93,9 @@ describe('AuthService', () => {
   beforeEach(async () => {
     (bcrypt.compare as jest.Mock).mockClear().mockResolvedValue(true);
     mockPrisma.user.findFirst.mockResolvedValue(mockUser);
+    mockPrisma.user.findMany.mockResolvedValue([
+      { ...mockUser, tenant: mockTenant } as unknown as User & { tenant: Tenant },
+    ]);
     mockPrisma.tenant.findUnique.mockResolvedValue(mockTenant as unknown as Tenant);
     mockPrisma.user.findUnique.mockResolvedValue(mockUser as unknown as User);
 
@@ -263,11 +267,11 @@ describe('AuthService', () => {
       ] as unknown as Account[]);
 
       const result = await service.processSocialProfile(profile, 'google');
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token' });
       expect(mockPrisma.account.findMany).toHaveBeenCalled();
     });
 
-    it('should throw UnauthorizedException if provider is not enabled for tenant', async () => {
+    it('should throw OAuthCallbackRedirectException if provider is not enabled for tenant', async () => {
       mockPrisma.account.findMany.mockResolvedValue([]);
       mockPrisma.user.findMany.mockResolvedValue([]);
       mockPrisma.tenant.findFirst.mockResolvedValue({
@@ -276,8 +280,14 @@ describe('AuthService', () => {
       } as unknown as Tenant);
 
       await expect(service.processSocialProfile(profile, 'google', 'test-tenant')).rejects.toThrow(
-        UnauthorizedException,
+        OAuthCallbackRedirectException,
       );
+      await expect(
+        service.processSocialProfile(profile, 'google', 'test-tenant'),
+      ).rejects.toMatchObject({
+        errorCode: 'auth_provider_disabled',
+        tenantSlug: 'test-tenant',
+      });
     });
 
     it('should link to existing user if email matches and return JWT', async () => {
@@ -288,7 +298,7 @@ describe('AuthService', () => {
       mockPrisma.account.create.mockResolvedValue({} as unknown as Account);
 
       const result = await service.processSocialProfile(profile, 'google');
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token' });
       expect(mockPrisma.account.create).toHaveBeenCalledWith({
         data: {
           userId: mockUser.id,
@@ -309,16 +319,16 @@ describe('AuthService', () => {
       } as unknown as User);
 
       const result = await service.processSocialProfile(profile, 'google', 'test-tenant');
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token' });
       expect(mockPrisma.user.create).toHaveBeenCalled();
     });
 
-    it('should throw UnauthorizedException when new user and no contextTenantSlug', async () => {
+    it('should throw OAuthCallbackRedirectException when new user and no contextTenantSlug', async () => {
       mockPrisma.account.findMany.mockResolvedValue([]);
       mockPrisma.user.findMany.mockResolvedValue([]);
 
       await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
-        UnauthorizedException,
+        OAuthCallbackRedirectException,
       );
       await expect(service.processSocialProfile(profile, 'google')).rejects.toThrow(
         'Sign up requires a tenant context',
@@ -337,17 +347,20 @@ describe('AuthService', () => {
       );
     });
 
-    it('should throw NotFoundException when contextTenantSlug does not exist', async () => {
+    it('should throw OAuthCallbackRedirectException when contextTenantSlug does not exist', async () => {
       mockPrisma.account.findMany.mockResolvedValue([]);
       mockPrisma.user.findMany.mockResolvedValue([]);
       mockPrisma.tenant.findFirst.mockResolvedValue(null);
 
       await expect(
         service.processSocialProfile(profile, 'google', 'non-existent-tenant'),
-      ).rejects.toThrow(NotFoundException);
+      ).rejects.toThrow(OAuthCallbackRedirectException);
       await expect(
         service.processSocialProfile(profile, 'google', 'non-existent-tenant'),
-      ).rejects.toThrow('Tenant with slug "non-existent-tenant" not found');
+      ).rejects.toMatchObject({
+        errorCode: 'auth_failed',
+        tenantSlug: 'non-existent-tenant',
+      });
     });
 
     it('should throw UnauthorizedException when email is linked to different provider account', async () => {
@@ -392,11 +405,12 @@ describe('AuthService', () => {
       const result = await service.processSocialProfile(profile, 'google');
 
       expect(result).toMatchObject({
+        access_token: 'mock-jwt-token',
+        needsSelection: true,
         tenants: expect.arrayContaining([
           expect.objectContaining({ id: 'tenant-uuid-1', name: 'Tenant A', slug: 'tenant-a' }),
           expect.objectContaining({ id: 'tenant-uuid-2', name: 'Tenant B', slug: 'tenant-b' }),
         ]),
-        tempToken: 'mock-jwt-token',
       });
       expect(mockPrisma.account.createMany).toHaveBeenCalledWith({
         data: [
@@ -425,7 +439,7 @@ describe('AuthService', () => {
     it('should return JWT when single tenant and no MFA', async () => {
       const result = await service.attemptLogin('admin@example.com', 'admin123');
 
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token' });
       expect(prisma.user.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ email: 'admin@example.com' }),
@@ -454,22 +468,117 @@ describe('AuthService', () => {
       const result = await service.attemptLogin('admin@example.com', 'admin123');
 
       expect(result).toMatchObject({
+        access_token: expect.any(String),
+        needsSelection: true,
         tenants: expect.arrayContaining([
           expect.objectContaining({ id: 'tenant-uuid-1', name: 'Tenant A', slug: 'tenant-a' }),
           expect.objectContaining({ id: 'tenant-uuid-2', name: 'Tenant B', slug: 'tenant-b' }),
         ]),
-        tempToken: 'mock-jwt-token',
       });
-      expect(mockRedisService.set).toHaveBeenCalledWith(
-        expect.stringMatching(/^tenant_selection:/),
-        expect.any(String),
-        300,
+    });
+
+    it('should include suggestedTenant when user has multiple tenants and body had tenantSlug that matches', async () => {
+      const user2 = {
+        ...mockUser,
+        id: 'user-uuid-2',
+        tenantId: 'tenant-uuid-2',
+        tenant: {
+          id: 'tenant-uuid-2',
+          name: 'Tenant B',
+          slug: 'tenant-b',
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+      };
+      mockPrisma.user.findMany.mockResolvedValue([
+        { ...mockUser, tenant: { ...mockUser.tenant, name: 'Tenant A', slug: 'tenant-a' } },
+        user2,
+      ] as unknown as User[]);
+
+      const result = await service.attemptLogin(
+        'admin@example.com',
+        'admin123',
+        'tenant-a',
+        undefined,
       );
+
+      expect(result).toMatchObject({
+        access_token: expect.any(String),
+        needsSelection: true,
+        suggestedTenant: 'tenant-a',
+        tenants: expect.any(Array),
+      });
+    });
+
+    it('should include suggestedTenant when body had tenantId that resolves to a slug in user tenants', async () => {
+      const user2 = {
+        ...mockUser,
+        id: 'user-uuid-2',
+        tenantId: 'tenant-uuid-2',
+        tenant: {
+          id: 'tenant-uuid-2',
+          name: 'Tenant B',
+          slug: 'tenant-b',
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+      };
+      mockPrisma.user.findMany.mockResolvedValue([
+        { ...mockUser, tenant: { ...mockUser.tenant, name: 'Tenant A', slug: 'tenant-a' } },
+        user2,
+      ] as unknown as User[]);
+      mockPrisma.tenant.findUnique.mockResolvedValue({
+        id: 'tenant-uuid-2',
+        slug: 'tenant-b',
+      } as Tenant);
+
+      const result = await service.attemptLogin(
+        'admin@example.com',
+        'admin123',
+        undefined,
+        'tenant-uuid-2',
+      );
+
+      expect(result).toMatchObject({
+        access_token: expect.any(String),
+        needsSelection: true,
+        suggestedTenant: 'tenant-b',
+        tenants: expect.any(Array),
+      });
+    });
+
+    it('should omit suggestedTenant when body tenantSlug is not in user tenant list', async () => {
+      const user2 = {
+        ...mockUser,
+        id: 'user-uuid-2',
+        tenantId: 'tenant-uuid-2',
+        tenant: {
+          id: 'tenant-uuid-2',
+          name: 'Tenant B',
+          slug: 'tenant-b',
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+      };
+      mockPrisma.user.findMany.mockResolvedValue([
+        { ...mockUser, tenant: { ...mockUser.tenant, name: 'Tenant A', slug: 'tenant-a' } },
+        user2,
+      ] as unknown as User[]);
+
+      const result = await service.attemptLogin(
+        'admin@example.com',
+        'admin123',
+        'other-tenant',
+        undefined,
+      );
+
+      expect(result).toMatchObject({ needsSelection: true, tenants: expect.any(Array) });
+      expect(result).not.toHaveProperty('suggestedTenant');
     });
   });
 
   describe('selectTenant', () => {
-    it('should return JWT when tempToken and tenantId are valid', async () => {
+    it('should return JWT when legacy tempToken and tenantId are valid', async () => {
       const sessionId = 'session-uuid';
       const tenantUsers = [{ userId: mockUser.id, tenantId: mockUser.tenantId }];
       (mockJwtService.verify as jest.Mock).mockReturnValue({
@@ -481,8 +590,29 @@ describe('AuthService', () => {
 
       const result = await service.selectTenant('valid-temp-token', mockUser.tenantId);
 
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token', tenantSlug: 'acme' });
       expect(mockRedisService.del).toHaveBeenCalledWith(`tenant_selection:${sessionId}`);
+    });
+
+    it('should return JWT when selection JWT (sub+email) and tenantId are valid', async () => {
+      (mockJwtService.verify as jest.Mock).mockReturnValue({
+        sub: mockUser.id,
+        email: mockUser.email,
+      });
+      mockPrisma.user.findFirst.mockResolvedValue(mockUser as unknown as User);
+
+      const result = await service.selectTenant('selection-jwt-token', mockUser.tenantId);
+
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token', tenantSlug: 'acme' });
+      expect(mockPrisma.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            email: mockUser.email,
+            tenantId: mockUser.tenantId,
+            bypassTenantId: true,
+          }),
+        }),
+      );
     });
 
     it('should throw UnauthorizedException when tempToken is invalid', async () => {
@@ -523,10 +653,10 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('should return access_token with JWT payload', async () => {
+    it('should return access_token and tenantSlug with JWT payload (sub, email, role, tenantId)', async () => {
       const result = await service.login(mockUser);
 
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token', tenantSlug: 'acme' });
       expect(jwtService.sign).toHaveBeenCalledWith(
         {
           sub: mockUser.id,
@@ -537,6 +667,11 @@ describe('AuthService', () => {
         },
         { expiresIn: '7d' },
       );
+    });
+
+    it('should throw BadRequestException when tenant slug is missing', async () => {
+      mockPrisma.tenant.findUnique.mockResolvedValueOnce({ slug: null } as unknown as Tenant);
+      await expect(service.login(mockUser)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -558,6 +693,184 @@ describe('AuthService', () => {
         },
       );
       expect(service.validateRedirectUrl('https://app.example.com')).toBe(true);
+    });
+
+    it('should allow localhost in dev when allowed domains is empty', () => {
+      (mockConfigService.get as jest.Mock).mockImplementation(
+        (key: string, defaultValue?: unknown) => {
+          if (key === 'ALLOWED_OAUTH_REDIRECT_DOMAINS') return '';
+          if (key === 'NODE_ENV') return 'dev';
+          return defaultValue;
+        },
+      );
+      expect(service.validateRedirectUrl('http://localhost:3001')).toBe(true);
+      expect(service.validateRedirectUrl('https://evil.com')).toBe(false);
+    });
+  });
+
+  describe('getFrontendOAuthRedirectBaseUrl', () => {
+    it('should return FRONTEND_URL when set and validated', () => {
+      (mockConfigService.get as jest.Mock).mockImplementation(
+        (key: string, defaultValue?: unknown) => {
+          if (key === 'FRONTEND_URL') return 'http://localhost:3001';
+          if (key === 'ALLOWED_OAUTH_REDIRECT_DOMAINS') return 'localhost';
+          return defaultValue;
+        },
+      );
+      expect(service.getFrontendOAuthRedirectBaseUrl()).toBe('http://localhost:3001');
+    });
+
+    it('should return undefined when FRONTEND_URL is not set and not dev', () => {
+      (mockConfigService.get as jest.Mock).mockImplementation(
+        (key: string, defaultValue?: unknown) => {
+          if (key === 'FRONTEND_URL') return undefined;
+          if (key === 'NODE_ENV') return 'prod';
+          return defaultValue;
+        },
+      );
+      expect(service.getFrontendOAuthRedirectBaseUrl()).toBeUndefined();
+    });
+  });
+
+  describe('buildFrontendAuthCallbackUrl', () => {
+    it('should build URL with token and tenantSlug', () => {
+      (mockConfigService.get as jest.Mock).mockImplementation(
+        (key: string, defaultValue?: unknown) => {
+          if (key === 'FRONTEND_URL') return 'http://localhost:3001';
+          if (key === 'ALLOWED_OAUTH_REDIRECT_DOMAINS') return 'localhost';
+          return defaultValue;
+        },
+      );
+      const url = service.buildFrontendAuthCallbackUrl('jwt-123', 'acme');
+      expect(url).toBe('http://localhost:3001/auth/callback?token=jwt-123&tenantSlug=acme');
+    });
+
+    it('should omit tenantSlug param when not provided (avoids tenant=undefined)', () => {
+      (mockConfigService.get as jest.Mock).mockImplementation(
+        (key: string, defaultValue?: unknown) => {
+          if (key === 'FRONTEND_URL') return 'http://localhost:3001';
+          if (key === 'ALLOWED_OAUTH_REDIRECT_DOMAINS') return 'localhost';
+          return defaultValue;
+        },
+      );
+      const url = service.buildFrontendAuthCallbackUrl('jwt-123');
+      expect(url).toContain('token=jwt-123');
+      expect(new URL(url).searchParams.get('tenantSlug')).toBeNull();
+    });
+  });
+
+  describe('getTenantSlugFromAccessToken', () => {
+    it('should return slug when JWT is valid and tenant exists', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({ tenantId: 'tenant-uuid-1' });
+      prisma.tenant.findUnique.mockResolvedValue({ slug: 'acme' } as Tenant);
+
+      const slug = await service.getTenantSlugFromAccessToken('valid-jwt');
+
+      expect(slug).toBe('acme');
+    });
+
+    it('should return null when tenant is not found', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({ tenantId: 'missing-tenant-id' });
+      prisma.tenant.findUnique.mockResolvedValue(null);
+
+      const slug = await service.getTenantSlugFromAccessToken('valid-jwt');
+
+      expect(slug).toBeNull();
+    });
+
+    it('should return null when JWT is invalid', async () => {
+      (jwtService.verify as jest.Mock).mockImplementation(() => {
+        throw new Error('invalid token');
+      });
+
+      const slug = await service.getTenantSlugFromAccessToken('invalid-jwt');
+
+      expect(slug).toBeNull();
+    });
+  });
+
+  describe('buildFrontendRedirectUrl', () => {
+    beforeEach(() => {
+      (mockConfigService.get as jest.Mock).mockImplementation(
+        (key: string, defaultValue?: unknown) => {
+          if (key === 'FRONTEND_URL') return 'http://localhost:3001';
+          if (key === 'ALLOWED_OAUTH_REDIRECT_DOMAINS') return 'localhost';
+          return defaultValue;
+        },
+      );
+    });
+
+    it('should build /slug/dashboard?token= for JWT result with tenantSlug', async () => {
+      const loginResult = { access_token: 'jwt-123', tenantSlug: 'acme' };
+
+      const url = await service.buildFrontendRedirectUrl(loginResult);
+
+      expect(url).toBe('http://localhost:3001/acme/dashboard?token=jwt-123');
+    });
+
+    it('should resolve slug from JWT when tenantSlug missing and build dashboard URL', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({ tenantId: 'tenant-uuid-1' });
+      prisma.tenant.findUnique.mockResolvedValue({ slug: 'acme' } as Tenant);
+      const loginResult = { access_token: 'jwt-123' };
+
+      const url = await service.buildFrontendRedirectUrl(loginResult);
+
+      expect(url).toBe('http://localhost:3001/acme/dashboard?token=jwt-123');
+    });
+
+    it('should build /select-tenant?token= for tenant selection result', async () => {
+      const loginResult = {
+        access_token: 'selection-jwt-123',
+        needsSelection: true as const,
+        tenants: [
+          { id: 't1', name: 'Tenant 1', slug: 't1' },
+          { id: 't2', name: 'Tenant 2', slug: 't2' },
+        ],
+      };
+
+      const url = await service.buildFrontendRedirectUrl(loginResult);
+
+      expect(url).toContain('http://localhost:3001/select-tenant');
+      expect(new URL(url).searchParams.get('token')).toBe('selection-jwt-123');
+      expect(new URL(url).searchParams.get('tenants')).toBeTruthy();
+    });
+
+    it('should add suggestedTenant to select-tenant URL when present in result', async () => {
+      const loginResult = {
+        access_token: 'selection-jwt-123',
+        needsSelection: true as const,
+        suggestedTenant: 'acme',
+        tenants: [
+          { id: 't1', name: 'Tenant 1', slug: 't1' },
+          { id: 't2', name: 'Acme', slug: 'acme' },
+        ],
+      };
+
+      const url = await service.buildFrontendRedirectUrl(loginResult);
+
+      expect(new URL(url).searchParams.get('suggestedTenant')).toBe('acme');
+    });
+
+    it('should build /login?mfaToken= for MFA required result', async () => {
+      const loginResult = {
+        message: 'MFA_REQUIRED',
+        mfaToken: 'mfa-token-456',
+      };
+
+      const url = await service.buildFrontendRedirectUrl(loginResult);
+
+      expect(url).toBe('http://localhost:3001/login?mfaToken=mfa-token-456');
+    });
+
+    it('should build /select-tenant when JWT has no resolvable slug (fallback)', async () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({ tenantId: 'tenant-uuid-1' });
+      prisma.tenant.findUnique.mockResolvedValue(null);
+      const loginResult = { access_token: 'jwt-123' };
+
+      const url = await service.buildFrontendRedirectUrl(loginResult);
+
+      expect(url).toContain('/select-tenant');
+      expect(new URL(url).searchParams.get('token')).toBe('jwt-123');
     });
   });
 
@@ -589,15 +902,16 @@ describe('AuthService', () => {
       );
     });
 
-    it('should build URL with tempToken when tenant selection result', async () => {
+    it('should build URL with token when tenant selection result', async () => {
       const loginResult = {
+        access_token: 'selection-jwt-123',
+        needsSelection: true as const,
         tenants: [{ id: 't1', name: 'Tenant 1', slug: 't1' }],
-        tempToken: 'temp-token-123',
       };
 
       const url = await service.buildOAuthRedirectUrl(loginResult);
 
-      expect(url).toContain('tempToken=temp-token-123');
+      expect(url).toContain('token=selection-jwt-123');
       expect(url).toContain('tenants=');
     });
   });
@@ -609,7 +923,7 @@ describe('AuthService', () => {
 
       const result = await service.exchangeOAuthCode('valid-code');
 
-      expect(result).toEqual({ access_token: 'stored-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'stored-jwt-token' });
       expect(mockRedisService.del).toHaveBeenCalledWith('oauth_code:valid-code');
     });
 
@@ -629,7 +943,7 @@ describe('AuthService', () => {
 
       const result = await service.exchangeOAuthCode('valid-code');
 
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token' });
       expect(mockRedisService.del).toHaveBeenCalledWith('oauth_code:valid-code');
     });
 
@@ -652,15 +966,18 @@ describe('AuthService', () => {
         role: 'USER',
         tenant: {
           id: 'tenant-uuid-2',
+          name: 'Tenant B',
+          slug: 'tenant-b',
           status: 'ACTIVE',
           deletedAt: null,
         },
       };
       prisma.user.findFirst.mockResolvedValue(targetUser as unknown as User);
+      prisma.user.findMany.mockResolvedValue([targetUser as unknown as User & { tenant: Tenant }]);
 
       const result = await service.switchTenant('user-uuid-1', 'tenant-uuid-2');
 
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token', tenantSlug: 'tenant-b' });
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 'user-uuid-1' },
         select: { email: true },
@@ -765,6 +1082,7 @@ describe('AuthService', () => {
       expect(mockMailService.sendResetPasswordEmail).toHaveBeenCalledWith(
         mockUser.email,
         expect.any(String),
+        mockTenant.slug,
         mockTenant.id,
       );
     });
@@ -888,7 +1206,7 @@ describe('AuthService', () => {
 
       const result = await service.verifyMfa(mockUser.id, '123456');
 
-      expect(result).toEqual({ access_token: 'mock-jwt-token' });
+      expect(result).toMatchObject({ access_token: 'mock-jwt-token', tenantSlug: 'acme' });
       expect(mockRedisService.del).toHaveBeenCalledWith(`mfa_attempts:${mockUser.id}`);
     });
 
