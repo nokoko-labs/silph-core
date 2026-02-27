@@ -29,13 +29,19 @@ describe('JwtStrategy', () => {
   });
 
   describe('validate', () => {
-    it('should return payload when all required fields are present', () => {
+    it('should return full payload when all required fields are present', () => {
       const payload: JwtPayload = {
         sub: 'user-1',
         email: 'user@example.com',
         role: 'USER',
         tenantId: 'tenant-1',
+        status: 'ACTIVE',
       };
+      expect(strategy.validate(payload)).toEqual(payload);
+    });
+
+    it('should return selection payload (sub + email only) for tenant selection token', () => {
+      const payload = { sub: 'user-1', email: 'user@example.com' };
       expect(strategy.validate(payload)).toEqual(payload);
     });
 
@@ -58,7 +64,7 @@ describe('JwtStrategy', () => {
       expect(() => strategy.validate(payload)).toThrow(UnauthorizedException);
     });
 
-    it('should throw UnauthorizedException when role is missing', () => {
+    it('should throw when full token has tenantId but missing role', () => {
       const payload = {
         sub: 'user-1',
         email: 'user@example.com',
@@ -67,11 +73,12 @@ describe('JwtStrategy', () => {
       expect(() => strategy.validate(payload)).toThrow(UnauthorizedException);
     });
 
-    it('should throw UnauthorizedException when tenantId is missing', () => {
+    it('should throw when full token has tenantId but missing status', () => {
       const payload = {
         sub: 'user-1',
         email: 'user@example.com',
         role: 'USER',
+        tenantId: 'tenant-1',
       } as unknown as JwtPayload;
       expect(() => strategy.validate(payload)).toThrow(UnauthorizedException);
     });
